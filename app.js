@@ -58,7 +58,7 @@
         NORM[i] = " " + norm(v[1] + " " + s[1] + " " + B[s[0]].name + " " + B[s[0]].full + " " + (v[4] || "")) + " ";
       }
       WR.forEach(function (w) { w.push(" " + norm(w[0]) + " "); });
-      CH.forEach(function (c) { var acc = 0; c.starts = c.items.map(function (i) { var s = acc; acc += V[i][2]; return s; }); c.total = acc; });
+      CH.forEach(function (c) { if (c.events) return; var acc = 0; c.starts = c.items.map(function (i) { var s = acc; acc += V[i][2]; return s; }); c.total = acc; });
     });
   }
 
@@ -96,7 +96,34 @@
     return { k: lo, i: c.items[lo], off: off, left: V[c.items[lo]][2] - off, began: t - off };
   }
   function chById(id) { for (var i = 0; i < CH.length; i++) if (CH[i].id === id) return CH[i]; return CH[0]; }
+  /* ---------------- Event of the Night: scheduled channels (same schedule + timing as WWE Unlimited / TNA Stream) ---------------- */
+  // events: [startUnix (8 PM ET + part offset), videoId, title, secs, posterTitle, posterSub]
+  function evNow(c, t) { t = t == null ? Date.now() / 1000 : t; for (var i = 0; i < c.events.length; i++) { var e = c.events[i]; if (e[0] <= t && t < e[0] + e[3]) return e; } return null; }
+  function evNext(c, t) { t = t == null ? Date.now() / 1000 : t; for (var i = 0; i < c.events.length; i++) if (c.events[i][0] > t) return c.events[i]; return null; }
+  function etDk(x) { return new Date(x * 1000).toLocaleDateString("en-US", { timeZone: "America/New_York" }); }
+  function etTime(x) { try { return new Date(x * 1000).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" }) + " ET"; } catch (e) { return tod(x); } }
+  function etDay(x) {
+    var n = Date.now() / 1000;
+    try { if (etDk(x) === etDk(n)) return "Tonight"; if (etDk(x) === etDk(n + 86400)) return "Tomorrow";
+      return new Date(x * 1000).toLocaleDateString("en-US", { weekday: "long", timeZone: "America/New_York" }); } catch (e) { return ""; }
+  }
+  function evTitle(e) { return e[4] || String(e[2]).replace(/\s+\u00b7\s+Part\s.*$/, ""); }
+  function evSub(e) { return e[4] && !e[5] ? e[2] : e[5]; }
+  function evPoster(e) { return "https://i.ytimg.com/vi/" + e[1] + "/hqdefault.jpg"; }
+  function evState(c) {  // {live, ev, next, label, cd}
+    var t = Date.now() / 1000, ev = evNow(c, t), nx = evNext(c, t);
+    if (ev) return { live: true, ev: ev, next: nx, off: t - ev[0], left: ev[0] + ev[3] - t };
+    return { live: false, ev: nx, next: nx, cd: nx ? nx[0] - t : 0, label: nx ? "Coming " + etDay(nx[0]).replace("Tonight", "tonight").replace("Tomorrow", "tomorrow") + " at " + etTime(nx[0]) : "Next event of the night coming soon" };
+  }
+  function evCard(c) {
+    var st = evState(c), e = st.ev, b = c.brand, x = B[b];
+    var art = ' style="' + bvars(b) + ';background-image:' + (e ? "url(" + evPoster(e) + ")," : "") + "linear-gradient(135deg," + x.b1 + ',#0B0B16 70%)"';
+    return '<a class="lc eotn ch-' + c.id + '" href="#/live/' + c.id + '" data-ch="' + c.id + '" style="' + bvars(b) + '"><div class="art"' + art + '><span class="tag">' + (st.live ? '<i class="dot"></i>Live · ' : "") + "Event of the Night</span>" + blogo(b, "evlogo") +
+      '<div class="chn"><b>' + esc(c.name) + "</b><small>" + (e ? (st.live ? "Now: " : (etDay(e[0]) === "Tonight" ? "Tonight: " : etDay(e[0]) + ": ")) + esc(evTitle(e)) : "Stay tuned to " + esc(c.site)) + '</small></div></div><div class="bar"><i style="width:' + (st.live ? Math.round(st.off / e[3] * 100) : 0) + '%"></i></div><div class="nx">' +
+      (st.live ? "<b>On the air</b> · ends " + etTime(e[0] + e[3]) : "<b>" + esc(st.label) + "</b>" + (st.cd ? ' · <span data-evcd="' + e[0] + '">starts in ' + clock(st.cd) + "</span>" : "")) + "</div></a>";
+  }
   function liveCard(c) {
+    if (c.events) return evCard(c);
     var n = chNow(c), v = V[n.i], nx = V[c.items[(n.k + 1) % c.items.length]];
     var art = ' style="background-image:' + (c.id === "network" ? "radial-gradient(120% 90% at 0% 0%,#22E4FF55,transparent 55%),radial-gradient(120% 90% at 100% 100%,#FF3D7F55,transparent 55%)," : "") + "url(" + thumb(v[0], 1) + '),linear-gradient(135deg,' + B[brandOf(n.i)].b1 + ',#0B0B16 70%)"';
     return '<a class="lc ch-' + c.id + '" href="#/live/' + c.id + '" data-ch="' + c.id + '"><div class="art"' + art + '><span class="tag"><i class="dot"></i>Live · ' + esc(c.name) + '</span><div class="chn"><b>' + esc(c.name) + "</b><small>Now: " + esc(v[1]) + '</small></div></div><div class="bar"><i style="width:' + Math.round(n.off / v[2] * 100) + '%"></i></div><div class="nx"><b>Next ' + tod(Date.now() / 1000 + n.left) + "</b> · " + esc(nx[1]) + "</div></a>";
@@ -107,7 +134,7 @@
     setTitle(""); nav("home");
     var rnd = seed(dayseed()), h = "";
     var total = V.length, hrs = Math.round(V.reduce(function (a, v) { return a + v[2]; }, 0) / 3600);
-    h += '<div class="wrap"><section class="hero"><div class="glow"></div><img class="hlogo" src="logo.svg" alt="WrestleWorld+" width="895" height="180"><span class="kick">12 promotions · one place</span><h1>Every promotion.<br><span>Every era.</span></h1><p>Free, official full matches, shows and pay-per-views from WWE to NJPW — organized by name and year, searchable by wrestler, with four channels running 24/7.</p>' +
+    h += '<div class="wrap"><section class="hero"><div class="glow"></div><img class="hlogo" src="logo.svg" alt="WrestleWorld+" width="895" height="180"><span class="kick">12 promotions · one place</span><h1>Every promotion.<br><span>Every era.</span></h1><p>Free, official full matches, shows and pay-per-views from WWE to NJPW — organized by name and year, searchable by wrestler, with 24/7 channels plus a WWE and a TNA Event of the Night every night at 8 PM ET.</p>' +
       '<div class="stats"><div><b>' + total.toLocaleString() + "</b>videos</div><div><b>" + hrs.toLocaleString() + "</b>hours</div><div><b>" + WR.length.toLocaleString() + "</b>wrestlers indexed</div></div></section>";
     h += '<section class="sec"><div class="sh"><div><h2>Live now</h2><p>24/7 channels — everyone sees the same thing at the same time.</p></div><a class="more" href="#/live">Guide</a></div><div class="rail" id="liverail">' + CH.map(liveCard).join("") + "</div></section>";
     var cw = cwAll(), ids = Object.keys(cw).filter(function (id) { return IDX[id] != null; }).sort(function (a, b) { return cw[b].at - cw[a].at; }).slice(0, 15).map(function (id) { return IDX[id]; });
@@ -325,7 +352,7 @@
     el.innerHTML = '<div id="ytp"></div>'; P.host = el; P.fellBack = false;
     function create(YT) {
       if (P.host !== el || !document.getElementById("ytp")) return null;
-      plog('create:' + id); P.player = new YT.Player("ytp", { videoId: id, width: "100%", height: "100%",
+      plog('create:' + id + '@' + st()); P.player = new YT.Player("ytp", { videoId: id, width: "100%", height: "100%",
         playerVars: { autoplay: 1, playsinline: 1, rel: 0, modestbranding: 1, start: st() },
         events: {
           onReady: function (e) { P.ready = true; plog('ready'); try { e.target.playVideo(); } catch (x) {} watchdog(); },
@@ -382,10 +409,34 @@
     setTitle(c.name); nav("live");
     app.innerHTML = '<div class="wrap"><div class="lv-h"><span class="kick">● Live 24/7</span></div><div class="rail chips chsw">' + CH.map(function (x) { return '<a class="chip' + (x.id === c.id ? " on" : "") + '" href="#/live/' + x.id + '" data-ch="' + x.id + '">' + esc(x.name) + "</a>"; }).join("") + '</div>' +
       '<div class="lvgrid" style="margin-top:14px"><div><div class="frame" id="lframe" style="border-radius:16px;overflow:hidden"><div class="tune"><button data-tune>' + "<span>" + ICON.play + "</span>Tune in to " + esc(c.name) + '</button></div></div><div class="lv-now" id="lnow"></div></div><div class="guide" id="lguide"></div></div><p style="color:var(--tx3);font-size:12.5px;margin-top:16px">' + esc(c.desc) + " Schedule is computed from the clock, so it is the same on every device.</p>" + foot() + "</div>";
-    liveInfo(); clearInterval(LV.timer); LV.timer = setInterval(liveInfo, 5000);
+    if (c.events) { LV.evId = null; evFrame(); }
+    liveInfo(); clearInterval(LV.timer); LV.timer = setInterval(liveInfo, c.events ? 1000 : 5000);
+  }
+  function evFrame() {  // not playing: tune button when the event is on the air, otherwise the branded "Coming" slate with countdown
+    var c = LV.ch, fr = $("#lframe"); if (!c || !fr || P.mode === "live") return;
+    var st = evState(c), e = st.ev, b = c.brand, k = st.live ? "live" : (e ? "c" + e[0] : "none");
+    if (fr.getAttribute("data-k") === k) { var cd = fr.querySelector("[data-evcd]"); if (cd) cd.textContent = "Starts in " + clock(+cd.getAttribute("data-evcd") - Date.now() / 1000); return; }
+    fr.setAttribute("data-k", k);
+    var bg = '<div class="evbg" style="background-image:' + (e ? "url(" + evPoster(e) + ")," : "") + "linear-gradient(135deg," + B[b].b1 + ',#0B0B16 70%)"></div>';
+    if (st.live) fr.innerHTML = '<div class="tune evtune" style="' + bvars(b) + '">' + bg + '<button data-tune><span>' + ICON.play + "</span>Watch " + esc(c.name) + "<small>" + esc(evTitle(e)) + " · Live now</small></button></div>";
+    else fr.innerHTML = '<div class="tune evtune evslate" style="' + bvars(b) + '">' + bg + '<div class="evsl">' + blogo(b, "evlogo") + '<p class="k">Event of the Night</p>' +
+      (e ? "<h3>" + esc(evTitle(e)) + "</h3>" + (evSub(e) ? "<p>" + esc(evSub(e)) + "</p>" : "") + '<p class="when">' + esc(st.label) + '</p><p class="cd" data-evcd="' + e[0] + '">Starts in ' + clock(st.cd) + "</p>"
+         : "<h3>Stay tuned to " + esc(c.site) + '</h3><p class="when">Every night at 8:00 PM ET</p>') + "</div></div>";
+  }
+  function evInfo(c) {
+    var st = evState(c), e = st.ev, now = Date.now() / 1000;
+    if (st.live) $("#lnow").innerHTML = '<span class="kick" style="color:var(--c3)">● On the air · Event of the Night</span><h2>' + esc(e[2]) + '</h2><div class="meta">' + blogo(c.brand).replace("<img", '<img style="height:18px;width:auto;max-width:70px;object-fit:contain"') + "<span>Started " + etTime(e[0]) + '</span></div><div class="lv-prog"><i style="width:' + (st.off / e[3] * 100).toFixed(1) + '%"></i></div><div class="lv-times"><span>' + clock(st.off) + " in</span><span>" + clock(st.left) + " left · ends " + etTime(e[0] + e[3]) + "</span></div>";
+    else $("#lnow").innerHTML = '<span class="kick" style="color:var(--c3)">Event of the Night</span><h2>' + (e ? esc(evTitle(e)) : "Stay tuned to " + esc(c.site)) + '</h2><div class="meta">' + blogo(c.brand).replace("<img", '<img style="height:18px;width:auto;max-width:70px;object-fit:contain"') + "<span>" + (e ? esc(st.label) + " · starts in " + clock(st.cd) : "Every night at 8:00 PM ET") + "</span></div>";
+    var g = "<ul>", up = c.events.filter(function (x) { return x[0] + x[3] > now; }).slice(0, 8);
+    up.forEach(function (x) { g += "<li><b>" + (x === st.ev && st.live ? "Now" : etDay(x[0]) + " " + etTime(x[0])) + "</b><span>" + esc(x[2]) + "</span></li>"; });
+    $("#lguide").innerHTML = (up.length ? g : g + "<li><b>8:00 PM ET</b><span>Next event of the night coming soon</span></li>") + "</ul>";
+    // follow the schedule: an event started or ended while watching / waiting
+    if (P.mode === "live") { var nowId = st.live ? e[0] + e[1] : null; if (nowId !== LV.evId) { if (nowId) tuneLive(); else { destroyPlayer(); P.mode = null; LV.playing = null; LV.evId = null; evFrame(); } } }
+    else evFrame();
   }
   function liveInfo() {
     var c = LV.ch; if (!c || !$("#lnow")) { clearInterval(LV.timer); return; }
+    if (c.events) return evInfo(c);
     var n = chNow(c), v = V[n.i], b = brandOf(n.i), now = Date.now() / 1000;
     $("#lnow").innerHTML = '<span class="kick" style="color:var(--c3)">Now playing</span><h2>' + esc(v[1]) + '</h2><div class="meta">' + blogo(b).replace("<img", '<img style="height:18px;width:auto;max-width:70px;object-fit:contain"') + "<span>" + esc(S[v[3]][1]) + "</span><span>· " + esc(fdate(v)) + "</span>" + kb(v[6]) + '</div><div class="lv-prog"><i style="width:' + (n.off / v[2] * 100).toFixed(1) + '%"></i></div><div class="lv-times"><span>' + tod(n.began) + " · " + clock(n.off) + " in</span><span>" + clock(n.left) + " left · ends " + tod(now + n.left) + "</span></div>";
     var g = '<ul><li><b>Now</b><span>' + esc(v[1]) + "</span></li>", t = now + n.left;
@@ -395,12 +446,22 @@
     if (P.mode === "live" && LV.playing != null && n.i !== LV.clockI) { if (n.i === LV.playing) LV.clockI = n.i; else tuneLive(); }
   }
   function tuneLive(advance) {
+    if (LV.ch && LV.ch.events) return tuneEvent();
     var c = LV.ch, n = chNow(c), i = n.i, off = n.off, fr = $("#lframe"); if (!c || !fr) return;
     if (advance && i === LV.playing) { i = c.items[(n.k + 1) % c.items.length]; off = 0; }  // ended (or failed) a moment before the clock: roll on now
     P.mode = "live"; LV.playing = i; LV.clockI = n.i;
     mkPlayer(fr, V[i][0], function () { var m = chNow(c); return m.i === i ? m.off : off; },
       function () { setTimeout(function () { if (P.mode === "live") tuneLive(true); }, 300); },
       function () { LV.skip = (LV.skip || 0) + 1; if (LV.skip < 4) setTimeout(function () { if (P.mode === "live") tuneLive(true); }, 500); });
+  }
+  function tuneEvent() {  // join the scheduled event at the same offset everyone else is at (instant, inside the tap)
+    var c = LV.ch, fr = $("#lframe"), e = evNow(c); if (!c || !fr) return;
+    if (!e) { evFrame(); return; }
+    fr.removeAttribute("data-k");
+    P.mode = "live"; LV.playing = e[1]; LV.evId = e[0] + e[1];
+    mkPlayer(fr, e[1], function () { return Date.now() / 1000 - e[0]; },
+      function () { setTimeout(function () { if (P.mode === "live") { destroyPlayer(); P.mode = null; LV.playing = null; LV.evId = null; liveInfo(); if (evNow(c)) tuneEvent(); } }, 300); },
+      function () { destroyPlayer(); P.mode = null; LV.playing = null; LV.evId = null; fr.setAttribute("data-k", "live"); fr.innerHTML = '<div class="tune evtune evslate" style="' + bvars(c.brand) + '"><div class="evsl">' + blogo(c.brand, "evlogo") + '<p class="k">Event of the Night</p><h3>We\'re having trouble with tonight\'s broadcast.</h3><p class="when">Stay tuned to ' + esc(c.site) + '</p><button class="btn" data-tune style="margin:10px auto 0">Try again</button></div></div>'; });
   }
   function goLive(id) {  // tap on a channel card / chip: render the channel and start it inside the same gesture
     var h = "#/live/" + id; if (location.hash !== h) history.pushState(null, "", h);
@@ -453,6 +514,7 @@
     else if (a.hasAttribute("data-tune")) { LV.skip = 0; tuneLive(); }
   });
   setInterval(function () { var r = $("#liverail"); if (r && !document.hidden) r.innerHTML = CH.map(liveCard).join(""); }, 30000);
+  setInterval(function () { var n = Date.now() / 1000; document.querySelectorAll("#liverail [data-evcd]").forEach(function (el) { var d = +el.getAttribute("data-evcd") - n; if (d <= 0) { var r = $("#liverail"); if (r) r.innerHTML = CH.map(liveCard).join(""); } else el.textContent = "starts in " + clock(d); }); }, 1000);
 
   yt(); // preload the IFrame API so the first tap can start playback synchronously
   load().then(render, function (e) { app.innerHTML = '<div class="wrap"><div class="empty">Could not load the catalog (' + esc(e.message) + "). Pull to refresh.</div></div>"; });

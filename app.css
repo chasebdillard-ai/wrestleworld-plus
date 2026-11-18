@@ -252,3 +252,24 @@ footer .wrap{display:flex;flex-direction:column;gap:6px}
 /* ---------- muted-autoplay fallback ---------- */
 .unm{position:absolute;left:10px;top:10px;z-index:5;display:flex;align-items:center;gap:8px;padding:9px 14px;border-radius:999px;background:#000d;color:#fff;border:1px solid #ffffff40;font:700 13px/1 var(--txt);box-shadow:0 6px 20px #0009;cursor:pointer}
 .unm svg{width:18px;height:18px}
+/* Event of the Night channels (WWE / TNA branded) */
+.lc.eotn{border-color:color-mix(in srgb,var(--b1) 55%,transparent)}
+.lc.eotn .art{background-size:cover;background-position:center}
+.lc.eotn .tag{background:var(--b1);color:var(--bink)}
+.lc.eotn .tag .dot{background:currentColor}
+.lc.eotn .bar i{background:var(--b1)}
+.lc.eotn .nx b{color:var(--b1)}
+.lc .evlogo{position:absolute;top:10px;right:12px;z-index:2;height:28px;width:auto;max-width:80px;object-fit:contain;filter:drop-shadow(0 2px 6px #000)}
+.evtune{background:#000}
+.evtune .evbg{position:absolute;inset:0;background:center/cover;opacity:.45;filter:saturate(1.1)}
+.evtune .evbg:after{content:"";position:absolute;inset:0;background:radial-gradient(70% 80% at 50% 50%,transparent,#000d 85%)}
+.evtune button{position:relative;z-index:1}
+.evtune button span{background:var(--b1);color:var(--bink);box-shadow:0 10px 40px -8px var(--b1)}
+.evtune button small{font:600 12px/1.3 var(--sans,Inter,sans-serif);letter-spacing:0;text-transform:none;color:#ddd;max-width:80%;text-align:center}
+.evsl{position:relative;z-index:1;text-align:center;padding:14px 18px;max-width:92%}
+.evsl .evlogo{position:static;height:34px;margin:0 auto 8px;display:block}
+.evsl .k{font:800 11px/1 var(--disp);letter-spacing:.14em;text-transform:uppercase;color:var(--b1);margin:0 0 6px}
+.evsl h3{font:800 clamp(16px,3.2vw,26px)/1.15 var(--disp);margin:0 0 6px}
+.evsl p{margin:0 0 4px;color:#ddd;font-size:13px}
+.evsl .when{font-weight:700;color:#fff}
+.evsl .cd{font:800 clamp(18px,3.6vw,30px)/1.2 var(--disp);color:var(--b1);font-variant-numeric:tabular-nums}
