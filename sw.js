@@ -1,5 +1,5 @@
 /* WrestleWorld+ service worker: network-first for everything, cached fallback so the shell opens offline. */
-var C = "ww-v2";
+var C = "ww-v3";
 self.addEventListener("install", function (e) { self.skipWaiting(); e.waitUntil(caches.open(C).then(function (c) { return c.addAll(["./", "index.html", "app.css", "app.js", "logo.svg"]).catch(function () {}); })); });
 self.addEventListener("activate", function (e) { e.waitUntil(self.clients.claim()); });
 self.addEventListener("fetch", function (e) {
