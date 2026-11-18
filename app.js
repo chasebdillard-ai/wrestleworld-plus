@@ -635,6 +635,17 @@
   dock.innerHTML = '<iframe id="ytp" title="Video player" aria-hidden="true" tabindex="-1" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen ' +
     'src="https://www.youtube.com/embed/?enablejsapi=1&playsinline=1&rel=0&modestbranding=1&autoplay=0&fs=1&origin=' + encodeURIComponent(location.origin) + '"></iframe>';
   document.body.appendChild(dock);
+  /* On-air network bug (2026-11-18): translucent logo bottom-right of the player, only while the WWE Network (id wwetv) or
+     Spike TV (id tna) live channels play. Lives inside the dock above the iframe, pointer-events:none so taps / remote pass through. */
+  var BUG = { wwetv: "bug-wwe-network.svg", tna: "bug-spike-tv.svg" };
+  dock.insertAdjacentHTML("beforeend", '<img class="netbug" alt="" aria-hidden="true" draggable="false" hidden>');
+  function bugSync() {
+    var im = dock.querySelector(".netbug"); if (!im) return;
+    var id = P.mode === "live" && P.host && typeof LV !== "undefined" && LV.ch ? LV.ch.id : null, f = id && BUG[id];
+    if (f) { if (im.getAttribute("src") !== f) im.setAttribute("src", f); im.className = "netbug nb-" + id; im.hidden = false; }
+    else { im.hidden = true; im.className = "netbug"; }
+  }
+  window.WW_bug = bugSync;
   function initPlayer(YT) {
     if (P.player) return;
     P.player = new YT.Player("ytp", { events: {
@@ -661,11 +672,13 @@
   function showDock(el) {
     if (P.host && P.host !== el) P.host.classList.remove("playing");
     P.host = el; el.classList.add("playing"); dock.classList.remove("off"); place();
+    bugSync();
     if (!placeT) placeT = setInterval(place, 250);
   }
   function hideDock() {
     if (P.host) P.host.classList.remove("playing");
     P.host = null; dock.classList.add("off"); dock.removeAttribute("style"); clearInterval(placeT); placeT = null;
+    bugSync();
   }
   window.addEventListener("scroll", function () { if (P.host) place(); }, { capture: true, passive: true });
   window.addEventListener("resize", function () { if (P.host) place(); });
