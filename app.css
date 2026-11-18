@@ -333,3 +333,4 @@ html.tv .slide .sbg img{transition:none}
 html.tv .car-arr{display:none}
 @media(min-width:900px){.slide .stx{padding-left:76px}}
 html.tv .slide .stx{padding-left:40px}
+.hero .glow{left:0;right:0}

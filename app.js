@@ -584,6 +584,7 @@
     if (sheet.hidden) return; destroyPlayer(); P.mode = null; sheet.hidden = true; sheet.innerHTML = ""; document.documentElement.style.overflow = "";
     if (!fromPop && history.state && history.state.sheet) history.back();
     var r = route(); if (r[0] === "" || r[0] === "home") { var row = $("#cwrow"); if (row || Object.keys(cwAll()).length) viewHome(); }
+    if (IS_TV && !fromPop) { var op = P.opener; setTimeout(function () { var el = op && document.contains(op) ? op : findKey(P.openerKey, app); tvFocus(el || firstContent()); }, 60); }
   }
 
   /* ---------------- live channel view ---------------- */
@@ -751,7 +752,7 @@
       var a = document.activeElement;
       if (a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA")) return back0.apply(T, arguments);  // close the keyboard first
       if (document.fullscreenElement) return back0.apply(T, arguments);
-      if (!sheet.hidden) { var op = P.opener; closeSheet(); setTimeout(function () { var el = op && document.contains(op) ? op : findKey(P.openerKey, app); tvFocus(el || firstContent()); }, 60); return true; }
+      if (!sheet.hidden) { closeSheet(); return true; }
       var r = route()[0] || "";
       if (r === "" || r === "home") {
         if (window.TVNative && window.TVNative.exitApp) { window.TVNative.exitApp(); return true; }
