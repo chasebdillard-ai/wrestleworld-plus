@@ -6,6 +6,11 @@
   var B = window.WW_BRANDS, ORDER = window.WW_ORDER, $ = function (s, r) { return (r || document).querySelector(s); };
   var CAT, V, S, WR, CH, EPOCH, NORM = [], SERIES_BY_BRAND = {}, BY_BRAND = {}, YT_READY = null;
   var app = $("#app"), sheet = $("#sheet");
+  var UAS = navigator.userAgent || "";
+  var IS_TV = !!window.TVNative || /AndroidTV-WebApp|AFT[A-Z]|BRAVIA|GoogleTV|Google TV|Android TV|SMART-TV|SmartTV|CrKey|Tizen|Web0S/i.test(UAS);
+  var IS_IOS = /iPad|iPhone|iPod/.test(UAS) || (/Macintosh/.test(UAS) && navigator.maxTouchPoints > 1);
+  if (IS_TV) document.documentElement.classList.add("tv");
+  if (IS_IOS) document.documentElement.classList.add("ios");
   var KIND = { e: "Full Event", p: "Full Episode", m: "Full Match", s: "Special" }, KINDS = { e: "Full Events", p: "Full Episodes", m: "Full Matches", s: "Specials" };
   var ICON = {
     play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l11-6.5a1 1 0 0 0 0-1.72l-11-6.5A1 1 0 0 0 8 5.5z"/></svg>',
@@ -129,16 +134,111 @@
     return '<a class="lc ch-' + c.id + '" href="#/live/' + c.id + '" data-ch="' + c.id + '"><div class="art"' + art + '><span class="tag"><i class="dot"></i>Live · ' + esc(c.name) + '</span><div class="chn"><b>' + esc(c.name) + "</b><small>Now: " + esc(v[1]) + '</small></div></div><div class="bar"><i style="width:' + Math.round(n.off / v[2] * 100) + '%"></i></div><div class="nx"><b>Next ' + tod(Date.now() / 1000 + n.left) + "</b> · " + esc(nx[1]) + "</div></a>";
   }
 
+  /* ---------------- Home hero carousel (2026-11-18): EOTN WWE/TNA (+ next night), Recently Added, featured ---------------- */
+  function ytImg(id, cls) {  // maxres with hq fallback (also when YouTube answers maxres with its 120px grey placeholder)
+    var hq = thumb(id, 1);
+    return '<img class="' + (cls || "") + '" src="https://i.ytimg.com/vi/' + id + '/maxresdefault.jpg" alt="" loading="eager" onerror="this.onerror=null;this.src=\'' + hq + '\'" onload="if(this.naturalWidth&&this.naturalWidth<=120){this.onload=null;this.src=\'' + hq + '\'}">';
+  }
+  function newest(n) {
+    var l = V.map(function (v, i) { return i; }).filter(function (i) { return V[i][5] && V[i][6] !== "s"; });
+    l.sort(function (a, c) { return V[c][5].localeCompare(V[a][5]) || V[c][2] - V[a][2]; });
+    return l.slice(0, n);
+  }
+  function evNextNight(c) {  // the following night's pick (a different ET day than the current/upcoming one)
+    var now = Date.now() / 1000, cur = null, L = c.events;
+    for (var k = 0; k < L.length; k++) if (now < L[k][0] + L[k][3]) { cur = L[k]; break; }
+    if (!cur) return null;
+    for (k = 0; k < L.length; k++) if (L[k][0] > cur[0] && etDk(L[k][0]) !== etDk(cur[0])) return L[k];
+    return null;
+  }
+  function vlrQueue() { return (window.WW_VLR || []).map(function (id) { return IDX[id]; }).filter(function (i) { return i != null; }); }
+  function brandRecent(b) { var l = BY_BRAND[b].filter(function (i) { return V[i][5] && V[i][2] >= 900; }); l.sort(function (a, c) { return V[c][5].localeCompare(V[a][5]); }); return l[0] != null ? l[0] : BY_BRAND[b][0]; }
+  function carSlides() {
+    var out = [];
+    ["wwe-eotn", "tna-eotn"].forEach(function (id) {
+      var c = null; CH.forEach(function (x) { if (x.id === id) c = x; }); if (!c || !c.events) return;
+      var st = evState(c), e = st.ev, b = c.brand;
+      if (e) out.push({ b: b, img: ytImg(e[1]), logo: 1, tag: (st.live ? '<i class="dot"></i>Live now · ' : "") + "Event of the Night",
+        title: evTitle(e), sub: (evSub(e) ? evSub(e) + " · " : "") + (st.live ? "On the air now on " + c.name + ". Jump in where everyone else is." : etDay(e[0]) + " at " + etTime(e[0]) + " on " + c.name + ". One event, one night, everyone watching together."),
+        badge: st.live ? "● LIVE NOW" : etDay(e[0]) + " · " + etTime(e[0]), btn: st.live ? "Watch live" : "Tune in", act: 'data-ch="' + id + '"', live: st.live });
+      var nx = evNextNight(c);
+      if (nx && e) { var wd = etDay(nx[0]); out.push({ b: b, img: ytImg(nx[1]), logo: 1, tag: "Coming " + wd + " · Event of the Night", title: evTitle(nx),
+        sub: (evSub(nx) ? evSub(nx) + " · " : "") + wd + " at " + etTime(nx[0]) + " on " + c.name + ".", badge: "Coming " + wd, btn: "See the schedule", act: 'href="#/live/' + id + '"' }); }
+    });
+    var nw = newest(40), qn = queue(nw), brs = [];
+    nw.slice(0, 12).forEach(function (i) { var n = B[brandOf(i)].name; if (brs.indexOf(n) < 0) brs.push(n); });
+    if (nw.length) out.push({ b: brandOf(nw[0]), img: ytImg(V[nw[0]][0]), tag: "Recently added", title: "Recently Added", sub: "The newest full shows and matches from " + brs.slice(0, 4).join(", ") + (brs.length > 4 ? " and more" : "") + ". Newest first: " + V[nw[0]][1], badge: "New this week", btn: "Play newest", act: 'data-playq="' + qn + '"', btn2: ["See all", "#/new"] });
+    var vq = vlrQueue();
+    if (vq.length) out.push({ b: "wwe", img: '<img src="vlr_poster.jpg?v=' + window.WW_VER + '" alt="" loading="eager" onerror="this.onerror=null;this.src=\'' + thumb("D8uVqJzqxDQ", 1) + '\'">', tag: "Featured playlist", title: "Viva La Raza", sub: "Eddie Guerrero's greatest matches. " + vq.length + " full matches, 1989 to 2005, free and official.", badge: vq.length + " full matches", btn: "Play Viva La Raza", act: 'data-playq="' + queue(vq) + '"', btn2: ["Eddie Guerrero", "#/search/" + encodeURIComponent("Eddie Guerrero")] });
+    [["njpw", "New hub", "New Japan Pro-Wrestling is here: Wrestle Kingdom, G1 Climax and more, in English and Japanese."], ["aaa", "New hub", "Lucha Libre AAA: Triplemanía, weekly shows and full luchas from Mexico."], ["nxt", "Now its own hub", "NXT, from TakeOver to Stand & Deliver, with its own hub."]].forEach(function (f) {
+      if (!BY_BRAND[f[0]] || !BY_BRAND[f[0]].length) return; var i = brandRecent(f[0]);
+      out.push({ b: f[0], img: ytImg(V[i][0]), logo: 1, tag: f[1], title: B[f[0]].full || B[f[0]].name, sub: f[2] + " " + BY_BRAND[f[0]].length.toLocaleString() + " videos.", badge: BY_BRAND[f[0]].length.toLocaleString() + " videos", btn: "Open " + B[f[0]].name + " hub", act: 'href="#/b/' + f[0] + '"', btn2: ["Shuffle", null, 'data-shuffle="' + f[0] + '"'] });
+    });
+    var net = chById("network"), n = chNow(net), v = V[n.i];
+    out.push({ b: brandOf(n.i), img: ytImg(v[0]), tag: '<i class="dot"></i>Live 24/7', title: net.name, sub: "Every promotion, around the clock. Now: " + v[1], badge: "On now", btn: "Watch " + net.name, act: 'data-ch="network"', live: 1 });
+    return out;
+  }
+  var CAR = { i: 0, n: 0, t: null, hold: false };
+  function carHtml() {
+    var sl = carSlides(); CAR.n = sl.length; if (CAR.i >= CAR.n) CAR.i = 0;
+    return '<section class="car" id="car" aria-roledescription="carousel" aria-label="Featured"><div class="car-track" style="transform:translateX(' + (-CAR.i * 100) + '%)">' + sl.map(function (s, k) {
+      return '<div class="slide' + (k === CAR.i ? " on" : "") + '"' + (k === CAR.i ? "" : " inert") + ' style="' + bvars(s.b) + '" aria-roledescription="slide" aria-label="' + (k + 1) + " of " + sl.length + '"><div class="sbg">' + s.img + '</div><div class="sfade"></div><div class="stx">' +
+        (s.logo ? blogo(s.b, "slogo") : "") + '<span class="stag">' + s.tag + "</span><h2>" + esc(s.title) + "</h2><p>" + esc(s.sub) + '</p><div class="sacts"><a class="btn car-btn' + (s.live ? " live" : "") + '" ' + (s.act.indexOf("href=") === 0 ? s.act : 'href="#" ' + s.act) + ">" + ICON.play + esc(s.btn) + "</a>" +
+        (s.btn2 ? '<a class="btn gh" ' + (s.btn2[2] ? 'href="#" ' + s.btn2[2] : 'href="' + s.btn2[1] + '"') + ">" + esc(s.btn2[0]) + "</a>" : "") + '<span class="sbadge">' + esc(s.badge) + "</span></div></div></div>";
+    }).join("") + '</div><button class="car-arr prev" data-car="-1" aria-label="Previous slide">' + ICON.back + '</button><button class="car-arr next" data-car="1" aria-label="Next slide">' + ICON.back + '</button><div class="car-dots">' +
+      sl.map(function (s, k) { return '<button class="cdot' + (k === CAR.i ? " on" : "") + '" data-cardot="' + k + '" aria-label="Slide ' + (k + 1) + '"></button>'; }).join("") + "</div></section>";
+  }
+  function carGo(k, focusBtn) {
+    var c = $("#car"); if (!c || !CAR.n) return;
+    CAR.i = ((k % CAR.n) + CAR.n) % CAR.n;
+    $(".car-track", c).style.transform = "translateX(" + (-CAR.i * 100) + "%)";
+    c.querySelectorAll(".slide").forEach(function (s, j) { s.classList.toggle("on", j === CAR.i); if (j === CAR.i) s.removeAttribute("inert"); else s.setAttribute("inert", ""); });
+    c.querySelectorAll(".cdot").forEach(function (d, j) { d.classList.toggle("on", j === CAR.i); });
+    c.scrollLeft = 0;
+    if (focusBtn) tvFocus(c.querySelectorAll(".slide")[CAR.i].querySelector(".car-btn"));
+    c.scrollLeft = 0;
+    carTimer();
+  }
+  function carTimer() {
+    clearTimeout(CAR.t);
+    CAR.t = setTimeout(function () {
+      var c = $("#car"); if (!c) return;
+      var f = tvCur(), focusedIn = f && c.contains(f);
+      if (CAR.hold || focusedIn || document.hidden || !sheet.hidden) return carTimer();
+      carGo(CAR.i + 1);
+    }, 7000);
+  }
+  function carInit() {
+    var c = $("#car"); if (!c) return;
+    if (IS_TV) c.querySelectorAll(".car-arr,.cdot").forEach(function (b) { b.setAttribute("inert", ""); b.tabIndex = -1; });  // TV: D-pad Left/Right on the slide button pages the carousel
+    var x0 = null, y0 = 0;
+    c.addEventListener("touchstart", function (e) { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; CAR.hold = true; }, { passive: true });
+    c.addEventListener("touchend", function (e) {
+      CAR.hold = false; if (x0 == null) return; var t = e.changedTouches[0], dx = t.clientX - x0, dy = t.clientY - y0; x0 = null;
+      if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.3) carGo(CAR.i + (dx < 0 ? 1 : -1));
+    }, { passive: true });
+    c.addEventListener("mouseenter", function () { CAR.hold = true; }); c.addEventListener("mouseleave", function () { CAR.hold = false; });
+    carTimer();
+  }
+  function viewNew() {
+    setTitle("Recently Added"); nav("home");
+    var l = newest(120), q = queue(l);
+    app.innerHTML = '<div class="wrap"><div class="sp-h"><span class="kick">Newest first</span><h1>Recently Added</h1><p>The newest full shows, events and matches across every promotion.</p></div><div class="tools"><button class="chip" data-playq="' + q + '">' + ICON.play.replace("<svg", '<svg width="14" height="14"') + 'Play all</button></div><div class="vl cols">' + l.map(function (i) { return row(i, q, { logo: 1, series: 1 }); }).join("") + "</div>" + foot() + "</div>";
+  }
+
   /* ---------------- views ---------------- */
   function viewHome() {
     setTitle(""); nav("home");
     var rnd = seed(dayseed()), h = "";
     var total = V.length, hrs = Math.round(V.reduce(function (a, v) { return a + v[2]; }, 0) / 3600);
-    h += '<div class="wrap"><section class="hero"><div class="glow"></div><img class="hlogo" src="logo.svg" alt="WrestleWorld+" width="895" height="180"><span class="kick">12 promotions · one place</span><h1>Every promotion.<br><span>Every era.</span></h1><p>Free, official full matches, shows and pay-per-views from WWE to NJPW — organized by name and year, searchable by wrestler, with 24/7 channels plus a WWE and a TNA Event of the Night every night at 8 PM ET.</p>' +
+    h += '<div class="wrap">' + carHtml() + '<section class="hero"><div class="glow"></div><img class="hlogo" src="logo.svg" alt="WrestleWorld+" width="895" height="180"><span class="kick">12 promotions · one place</span><h1>Every promotion.<br><span>Every era.</span></h1><p>Free, official full matches, shows and pay-per-views from WWE to NJPW — organized by name and year, searchable by wrestler, with 24/7 channels plus a WWE and a TNA Event of the Night every night at 8 PM ET.</p>' +
       '<div class="stats"><div><b>' + total.toLocaleString() + "</b>videos</div><div><b>" + hrs.toLocaleString() + "</b>hours</div><div><b>" + WR.length.toLocaleString() + "</b>wrestlers indexed</div></div></section>";
     h += '<section class="sec"><div class="sh"><div><h2>Live now</h2><p>24/7 channels — everyone sees the same thing at the same time.</p></div><a class="more" href="#/live">Guide</a></div><div class="rail" id="liverail">' + CH.map(liveCard).join("") + "</div></section>";
     var cw = cwAll(), ids = Object.keys(cw).filter(function (id) { return IDX[id] != null; }).sort(function (a, b) { return cw[b].at - cw[a].at; }).slice(0, 15).map(function (id) { return IDX[id]; });
+    var nw = newest(15), qnw = queue(nw);
+    var newRow = '<section class="sec" id="newrow"><div class="sh"><div><h2>Recently Added</h2><p>The newest full shows and matches across every promotion.</p></div><a class="more" href="#/new">See all</a></div><div class="rail">' + nw.map(function (i) { return card(i, qnw); }).join("") + "</div></section>";
     if (ids.length) h += '<section class="sec" id="cwrow"><div class="sh"><div><h2>Continue watching</h2></div></div><div class="rail">' + ids.map(function (i) { return card(i); }).join("") + "</div></section>";
+    h += newRow;
     h += '<section class="sec"><div class="sh"><div><h2>Promotions</h2><p>Each hub is branded to its promotion, sorted by name and year.</p></div></div><div class="pg-grid">' + ORDER.map(ptile).join("") + "</div></section>";
     var legends = [["wwe", "WrestleMania"], ["njpw", "G1 Climax"], ["wcw", "Starrcade"], ["aaa", "Triplemanía"], ["tna", "Bound for Glory"], ["aew", "All In"], ["roh", "Final Battle"], ["ecw", "November to Remember"], ["cmll", "Aniversario"], ["nwa", "Crockett Cup"], ["mlw", "Battle Riot"], ["nxt", "NXT TakeOver"], ["wwe", "Royal Rumble"], ["wcw", "Halloween Havoc"], ["aew", "Full Gear"]];
     var lg = legends.map(function (p) { return findSeries(p[0], p[1]); }).filter(function (x) { return x != null; });
@@ -151,7 +251,7 @@
     h += '<section class="sec"><div class="sh"><div><h2>Find a wrestler</h2><p>Every “X vs. Y” title is indexed — tap a name for their matches across every brand.</p></div><a class="more" href="#/search/">Search</a></div><div class="wchips">' +
       WR.slice(0, 24).map(function (w, k) { return wchip(k); }).join("") + "</div></section>";
     h += foot() + "</div>";
-    app.innerHTML = h;
+    app.innerHTML = h; carInit();
   }
   function ptile(b) {
     var x = B[b], n = BY_BRAND[b].length;
@@ -269,8 +369,13 @@
     setTitle("Search"); nav("search");
     q = q || "";
     app.innerHTML = '<div class="wrap"><div class="sbox">' + ICON.search + '<input id="sq" type="search" placeholder="Wrestler, event, show or year — try “Eddie Guerrero”" value="' + esc(q) + '" autocomplete="off" enterkeyhint="search"></div><div id="sres"></div>' + foot() + "</div>";
-    var inp = $("#sq"); inp.addEventListener("input", function () { clearTimeout(sTimer); sTimer = setTimeout(function () { history.replaceState(null, "", "#/search/" + encodeURIComponent(inp.value)); renderResults(inp.value); }, 180); });
-    renderResults(q); if (!q) setTimeout(function () { inp.focus(); }, 50);
+    var inp = $("#sq"); inp.addEventListener("input", function () { clearTimeout(sTimer); sTimer = setTimeout(function () { history.replaceState(null, "", "#/search/" + encodeURIComponent(inp.value)); navTop(); renderResults(inp.value); }, 180); });
+    inp.addEventListener("keydown", function (e) {
+      if (e.key !== "Enter") return;
+      e.preventDefault(); clearTimeout(sTimer); history.replaceState(null, "", "#/search/" + encodeURIComponent(inp.value)); navTop(); renderResults(inp.value);
+      inp.blur(); setTimeout(function () { var f = $("#sres a, #sres button"); if (f) tvFocus(f); }, 30);
+    });
+    renderResults(q); if (!q && !IS_TV) setTimeout(function () { inp.focus(); }, 50);
   }
   function renderResults(q) {
     var box = $("#sres"); if (!box) return;
@@ -315,63 +420,141 @@
     return YT_READY;
   }
   function ytLoaded() { return !!(window.YT && window.YT.Player && window.YT.loaded); }
-  var P = { player: null, ready: false, host: null, i: -1, q: null, tick: null, wd: null, mode: null, onEnd: null, onErr: null, fellBack: false, log: [] };
+  /* One persistent player for the whole session (2026-11-18 v3). iOS Safari only starts playVideo()/loadVideoById() from a tap
+     when the YouTube iframe ALREADY exists and is ready, so the iframe is created once at startup (offscreen, never display:none)
+     and a tap only calls loadVideoById()+playVideo() synchronously. The dock is position:fixed and tracks the visible frame
+     placeholder (#frame / #lframe), so the iframe is never moved in the DOM (moving an iframe reloads it).
+     iOS starts muted (guaranteed inline autoplay) until sound has been unlocked once by "Tap to unmute".
+     TV app (window.TVNative): if a video is still not playing after the muted fallback, a native touch is sent to the
+     player (= YouTube's own play button), so nobody has to press it. */
+  var P = { player: null, ready: false, host: null, i: -1, q: null, tick: null, wd: null, mode: null, onEnd: null, onErr: null, fellBack: false, log: [], want: null, soundOK: false, tapped: 0 };
   function plog(e) { P.log.push([Math.round(performance.now()), e]); if (P.log.length > 60) P.log.shift(); }
   window.WW_P = P; // test hook: WW_P.player.getPlayerState()
-  function destroyPlayer() {
-    clearInterval(P.tick); P.tick = null; clearTimeout(P.wd);
-    if (P.player && P.player.destroy) { try { P.player.destroy(); } catch (e) {} }
-    P.player = null; P.ready = false; P.host = null;
+  P.nativeTap = function () { return nativeTap(); }; P.ctlSync = function () { ctlSync(); };
+  var dock = document.createElement("div"); dock.id = "ytdock"; dock.className = "ytdock off";
+  dock.innerHTML = '<iframe id="ytp" title="Video player" aria-hidden="true" tabindex="-1" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen ' +
+    'src="https://www.youtube.com/embed/?enablejsapi=1&playsinline=1&rel=0&modestbranding=1&autoplay=0&fs=1&origin=' + encodeURIComponent(location.origin) + '"></iframe>';
+  document.body.appendChild(dock);
+  function initPlayer(YT) {
+    if (P.player) return;
+    P.player = new YT.Player("ytp", { events: {
+      onReady: function () { P.ready = true; plog("ready"); if (P.want) startVid(); },
+      onStateChange: function (e) { plog("state:" + e.data); if (e.data === 0 && P.onEnd && P.want) P.onEnd(); if (e.data === 1 && !isMuted(e.target)) unmuteBtn(false); ctlSync(); },
+      onError: function (e) { plog("error:" + e.data); clearTimeout(P.wd); if (P.want && P.onErr) P.onErr(e.data); } } });  // 2/5/100/101/150/152/153: skip, never mistake it for an autoplay block
   }
+  function place() {
+    var h = P.host;
+    if (!h || !document.contains(h)) { if (h) hideDock(); return; }
+    var r = h.getBoundingClientRect(), s = dock.style;
+    if (r.width < 4 || r.height < 4) { s.left = "-10000px"; return; }
+    var inSheet = sheet.contains(h), topB = 0, botB = innerHeight;
+    if (!inSheet) {
+      var hd = $("header.top"); if (hd) topB = hd.getBoundingClientRect().bottom;
+      var bn = $(".bnav"); if (bn && bn.offsetWidth) botB = Math.min(botB, bn.getBoundingClientRect().top);
+    }
+    var ct = Math.max(0, topB - r.top), cb = Math.max(0, r.bottom - botB);
+    s.left = r.left + "px"; s.top = r.top + "px"; s.width = r.width + "px"; s.height = r.height + "px";
+    s.zIndex = inSheet ? 85 : 35;
+    s.clipPath = s.webkitClipPath = (ct || cb) ? "inset(" + ct + "px 0 " + cb + "px 0)" : "";
+  }
+  var placeT = null;
+  function showDock(el) {
+    if (P.host && P.host !== el) P.host.classList.remove("playing");
+    P.host = el; el.classList.add("playing"); dock.classList.remove("off"); place();
+    if (!placeT) placeT = setInterval(place, 250);
+  }
+  function hideDock() {
+    if (P.host) P.host.classList.remove("playing");
+    P.host = null; dock.classList.add("off"); dock.removeAttribute("style"); clearInterval(placeT); placeT = null;
+  }
+  window.addEventListener("scroll", function () { if (P.host) place(); }, { capture: true, passive: true });
+  window.addEventListener("resize", function () { if (P.host) place(); });
+  function stopPlayer() {
+    clearInterval(P.tick); P.tick = null; clearTimeout(P.wd); P.want = null;
+    try { if (P.player && P.ready) P.player.stopVideo(); } catch (e) {}
+    unmuteBtn(false); hideDock(); ctlSync();
+  }
+  var destroyPlayer = stopPlayer;
   function unmuteBtn(show) {
-    var h = P.host; if (!h) return; var b = h.querySelector(".unm");
-    if (show && !b) h.insertAdjacentHTML("beforeend", '<button class="unm" data-unmute>' + ICON.mute + "<span>Tap to unmute</span></button>");
+    var b = dock.querySelector(".unm");
+    if (show && !b) dock.insertAdjacentHTML("beforeend", '<button class="unm" data-unmute>' + ICON.mute + "<span>Tap to unmute</span></button>");
     else if (!show && b) b.remove();
+    ctlSync();
   }
   function isMuted(p) { try { return !!(p.isMuted && p.isMuted()); } catch (e) { return false; } }
+  function pstate() { try { return P.player && P.ready ? P.player.getPlayerState() : -9; } catch (e) { return -9; } }
+  function startVid() {
+    var p = P.player, w = P.want; if (!p || !w) return;
+    plog("create:" + w.id + "@" + w.start);
+    try {
+      if (IS_IOS && !P.soundOK) p.mute(); else if (!P.userMuted) p.unMute();
+      p.loadVideoById({ videoId: w.id, startSeconds: w.start }); p.playVideo();
+    } catch (e) { plog("loadfail"); }
+    watchdog();
+  }
+  function nativeTap() {  // TV app only: a real touch on the player = YouTube's own play button
+    var N = window.TVNative, r = dock.getBoundingClientRect();
+    if (!N || !N.tapFrac || !P.host || r.width < 4) return false;
+    plog("native-tap"); P.tapped++;
+    N.tapFrac((r.left + r.width / 2) / innerWidth, (r.top + r.height / 2) / innerHeight);
+    setTimeout(function () { var a = document.activeElement; if (a && a.tagName === "IFRAME") a.blur(); try { window.focus(); } catch (e) {} tvRefocus(); }, 400);
+    return true;
+  }
   function watchdog() {
-    clearTimeout(P.wd);
+    clearTimeout(P.wd); var w = P.want;
     P.wd = setTimeout(function () {
-      var p = P.player; if (!p || !p.getPlayerState) return;
-      var st = p.getPlayerState();
+      var p = P.player; if (!p || P.want !== w) return;
+      var st = pstate();
       if (st === 1 || st === 3) { unmuteBtn(isMuted(p)); return; }
-      plog('fallback-muted:' + st); try { p.mute(); p.playVideo(); } catch (e) {}  // browser blocked sound: start muted instead
+      plog("fallback-muted:" + st); try { p.mute(); p.playVideo(); } catch (e) {}  // sound blocked: start muted instead
       P.fellBack = true; unmuteBtn(true);
+      P.wd = setTimeout(function () {
+        if (P.want !== w) return; var s2 = pstate();
+        if (s2 === 1 || s2 === 3) return;
+        if (!P.tapped || P.tapped < 2) { if (nativeTap()) { P.wd = setTimeout(function () { if (P.want === w && pstate() !== 1 && pstate() !== 3) { plog("still:" + pstate()); } }, 2500); return; } }
+        plog("needs-tap:" + s2);
+      }, 2200);
     }, 1500);
   }
   function mkPlayer(el, id, start, onEnd, onErr) {
-    P.onEnd = onEnd; P.onErr = onErr;
-    function st() { return Math.max(0, Math.floor((typeof start === "function" ? start() : start) || 0)); }
-    var p = P.player, ifr = null;
-    try { ifr = p && p.getIframe && p.getIframe(); } catch (e) {}
-    if (p && P.ready && ifr && el.contains(ifr)) {  // reuse the live player: same element, no reload, gesture kept
-      plog('reuse:' + id); try { p.loadVideoById({ videoId: id, startSeconds: st() }); p.playVideo(); } catch (e) {}
-      watchdog(); return Promise.resolve(p);
-    }
-    destroyPlayer();
-    el.innerHTML = '<div id="ytp"></div>'; P.host = el; P.fellBack = false;
-    function create(YT) {
-      if (P.host !== el || !document.getElementById("ytp")) return null;
-      plog('create:' + id + '@' + st()); P.player = new YT.Player("ytp", { videoId: id, width: "100%", height: "100%",
-        playerVars: { autoplay: 1, playsinline: 1, rel: 0, modestbranding: 1, start: st() },
-        events: {
-          onReady: function (e) { P.ready = true; plog('ready'); try { e.target.playVideo(); } catch (x) {} watchdog(); },
-          onStateChange: function (e) { plog('state:' + e.data); if (e.data === 0 && P.onEnd) P.onEnd(); if (e.data === 1 && !isMuted(e.target)) unmuteBtn(false); },
-          onError: function (e) { plog('error:' + e.data); clearTimeout(P.wd); if (P.onErr) P.onErr(e.data); } } });  // unplayable video: skip, never mistake it for an autoplay block
-      return P.player;
-    }
-    if (ytLoaded()) return Promise.resolve(create(window.YT));  // synchronous: still inside the tap
-    return yt().then(create);
+    P.onEnd = onEnd; P.onErr = onErr; P.fellBack = false; P.tapped = 0;
+    var s0 = Math.max(0, Math.floor((typeof start === "function" ? start() : start) || 0));
+    P.want = { id: id, start: s0 };
+    showDock(el);
+    if (P.ready) startVid();  // synchronous: still inside the tap / key press
+    else { plog("pending:" + id); yt().then(initPlayer); }
+    return Promise.resolve(P.player);
   }
   function unmute() {
     var p = P.player; if (!p) return;
+    P.userMuted = false;
     try { p.unMute(); p.setVolume(100); if (p.getPlayerState() !== 1) p.playVideo(); } catch (e) {}
     P.fellBack = false; unmuteBtn(false);
+    setTimeout(function () {  // iOS may pause a video that is unmuted from outside the player: fall back to muted + YouTube's own unmute
+      var st = pstate();
+      if (st === 1 && !isMuted(p)) { P.soundOK = true; plog("sound-on"); }
+      else if (st !== 3) { plog("unmute-blocked:" + st); try { p.mute(); p.playVideo(); } catch (e) {} }
+      ctlSync();
+    }, 900);
+  }
+  function togglePlay() {
+    var p = P.player; if (!p || !P.want) return false;
+    var st = pstate();
+    try { if (st === 1 || st === 3) p.pauseVideo(); else p.playVideo(); } catch (e) {}
+    setTimeout(ctlSync, 300); return true;
+  }
+  function seekBy(d) { var p = P.player; if (!p || !P.want || P.mode !== "vod") return; try { p.seekTo(Math.max(0, p.getCurrentTime() + d), true); } catch (e) {} }
+  function ctlHtml() { return '<span class="tvctl"><button class="chip" data-pp>' + ICON.play.replace("<svg", '<svg width="14" height="14"') + '<span>Pause</span></button><button class="chip" data-unm2 hidden>' + ICON.mute.replace("<svg", '<svg width="14" height="14"') + "<span>Unmute</span></button></span>"; }
+  function ctlSync() {
+    var st = pstate(), on = !!P.want, m = on && P.player && isMuted(P.player);
+    document.querySelectorAll("[data-pp] span").forEach(function (s) { s.textContent = on && (st === 1 || st === 3) ? "Pause" : "Play"; });
+    document.querySelectorAll("[data-unm2]").forEach(function (b) { b.hidden = !m; });
   }
 
   /* ---------------- VOD player sheet ---------------- */
   function openPlayer(i, qk) {
     var fresh = sheet.hidden || P.mode !== "vod";
+    if (sheet.hidden) { P.opener = tvCur(); P.openerKey = focusKey(P.opener); }
     if (P.mode === "live") { destroyPlayer(); LV.playing = null; }
     P.mode = "vod"; P.i = i; P.q = qk && QUEUES[qk] ? QUEUES[qk] : S[V[i][3]][6];
     if (P.q.indexOf(i) < 0) P.q = [i].concat(P.q);
@@ -383,7 +566,7 @@
     var i = P.i, v = V[i], b = brandOf(i), x = B[b], k = P.q.indexOf(i), cw = cwAll()[v[0]];
     var up = P.q.slice(k + 1, k + 13);
     var names = WR.map(function (w, n) { return [w, n]; }).filter(function (p) { return p[0][1].indexOf(i) >= 0; }).slice(0, 8);
-    if (start || !$("#frame", sheet)) sheet.innerHTML = '<div class="ptop"><div class="pbar"><button class="ib" data-close aria-label="Close">' + ICON.x + '</button><span class="sp"></span><img id="plogo" src="' + x.logo + '" alt="" style="height:24px;width:auto;max-width:100px;object-fit:contain"></div><div class="frame" id="frame"></div></div><div id="pbody"></div>';
+    if (start || !$("#frame", sheet)) sheet.innerHTML = '<div class="ptop"><div class="pbar"><button class="ib" data-close aria-label="Close">' + ICON.x + '</button>' + ctlHtml() + '<span class="sp"></span><img id="plogo" src="' + x.logo + '" alt="" style="height:24px;width:auto;max-width:100px;object-fit:contain"></div><div class="frame" id="frame"></div></div><div id="pbody"></div>';
     else $("#plogo").src = x.logo;
     $("#pbody").innerHTML = '<div class="pinfo" style="' + bvars(b) + '"><h2>' + esc(v[1]) + '</h2><div class="meta">' + kb(v[6]) + "<span>" + esc(fdate(v)) + "</span><span>· " + dur(v[2]) + '</span><a href="#/s/' + v[3] + '" data-close style="color:var(--b1x);font-weight:700">· ' + esc(S[v[3]][1]) + "</a></div>" +
       '<div class="tools"><button class="tgl' + (autoplayOn() ? " on" : "") + '" data-auto><i></i>Autoplay next</button>' + (cw ? '<span class="kb">Resumed at ' + clock(cw.t) + "</span>" : "") + "</div>" +
@@ -391,8 +574,9 @@
       (up.length ? '<div class="upn"><h3>Up next</h3><div class="vl">' + up.map(function (j) { return row(j, null, {}); }).join("") + "</div></div>" : "") + "</div>";
     sheet.querySelectorAll(".upn [data-play]").forEach(function (a) { a.setAttribute("data-inq", "1"); });
     sheet.scrollTop = 0;
-    function next() { if (P.mode === "vod" && P.i === i && autoplayOn() && P.q[k + 1] != null) { P.i = P.q[k + 1]; renderSheet(); } }
-    mkPlayer($("#frame"), v[0], cw && cw.t < v[2] - 30 ? cw.t : 0, function () { cwSave(v[0], v[2], v[2]); next(); }, function () { setTimeout(next, 1500); });
+    function next(force) { if (P.mode === "vod" && P.i === i && (force || autoplayOn()) && P.q[k + 1] != null) { P.i = P.q[k + 1]; renderSheet(); } }
+    mkPlayer($("#frame"), v[0], cw && cw.t < v[2] - 30 ? cw.t : 0, function () { cwSave(v[0], v[2], v[2]); next(); }, function () { setTimeout(function () { next(true); }, 1500); });
+    if (IS_TV) setTimeout(function () { tvFocus($("[data-pp]", sheet)); }, 30);
     clearInterval(P.tick);
     P.tick = setInterval(function () { try { var p = P.player; if (p && p.getCurrentTime && p.getPlayerState() === 1) cwSave(v[0], p.getCurrentTime(), p.getDuration() || v[2]); } catch (e) {} }, 5000);
   }
@@ -408,7 +592,7 @@
     var c = chById(id || LS.get("ww_ch", "network")); LS.set("ww_ch", c.id); LV.ch = c;
     setTitle(c.name); nav("live");
     app.innerHTML = '<div class="wrap"><div class="lv-h"><span class="kick">● Live 24/7</span></div><div class="rail chips chsw">' + CH.map(function (x) { return '<a class="chip' + (x.id === c.id ? " on" : "") + '" href="#/live/' + x.id + '" data-ch="' + x.id + '">' + esc(x.name) + "</a>"; }).join("") + '</div>' +
-      '<div class="lvgrid" style="margin-top:14px"><div><div class="frame" id="lframe" style="border-radius:16px;overflow:hidden"><div class="tune"><button data-tune>' + "<span>" + ICON.play + "</span>Tune in to " + esc(c.name) + '</button></div></div><div class="lv-now" id="lnow"></div></div><div class="guide" id="lguide"></div></div><p style="color:var(--tx3);font-size:12.5px;margin-top:16px">' + esc(c.desc) + " Schedule is computed from the clock, so it is the same on every device.</p>" + foot() + "</div>";
+      '<div class="lvgrid" style="margin-top:14px"><div><div class="frame" id="lframe" style="border-radius:16px;overflow:hidden"><div class="tune"><button data-tune>' + "<span>" + ICON.play + "</span>Tune in to " + esc(c.name) + '</button></div></div><div class="lvctl">' + ctlHtml() + '</div><div class="lv-now" id="lnow"></div></div><div class="guide" id="lguide"></div></div><p style="color:var(--tx3);font-size:12.5px;margin-top:16px">' + esc(c.desc) + " Schedule is computed from the clock, so it is the same on every device.</p>" + foot() + "</div>";
     if (c.events) { LV.evId = null; evFrame(); }
     liveInfo(); clearInterval(LV.timer); LV.timer = setInterval(liveInfo, c.events ? 1000 : 5000);
   }
@@ -448,11 +632,13 @@
   function tuneLive(advance) {
     if (LV.ch && LV.ch.events) return tuneEvent();
     var c = LV.ch, n = chNow(c), i = n.i, off = n.off, fr = $("#lframe"); if (!c || !fr) return;
-    if (advance && i === LV.playing) { i = c.items[(n.k + 1) % c.items.length]; off = 0; }  // ended (or failed) a moment before the clock: roll on now
+    var kk = n.k;
+    if (advance && i === LV.playing) { kk = n.k + 1; i = c.items[kk % c.items.length]; off = 0; }  // ended (or failed) a moment before the clock: roll on now
+    for (var g = 0; LV.bad && LV.bad[i] && g < 12; g++) { kk++; i = c.items[kk % c.items.length]; off = 0; }  // never retry a video that already failed
     P.mode = "live"; LV.playing = i; LV.clockI = n.i;
     mkPlayer(fr, V[i][0], function () { var m = chNow(c); return m.i === i ? m.off : off; },
       function () { setTimeout(function () { if (P.mode === "live") tuneLive(true); }, 300); },
-      function () { LV.skip = (LV.skip || 0) + 1; if (LV.skip < 4) setTimeout(function () { if (P.mode === "live") tuneLive(true); }, 500); });
+      function () { LV.bad = LV.bad || {}; LV.bad[i] = 1; LV.skip = (LV.skip || 0) + 1; if (LV.skip < 4) setTimeout(function () { if (P.mode === "live") tuneLive(true); }, 500); });
   }
   function tuneEvent() {  // join the scheduled event at the same offset everyone else is at (instant, inside the tap)
     var c = LV.ch, fr = $("#lframe"), e = evNow(c); if (!c || !fr) return;
@@ -461,22 +647,142 @@
     P.mode = "live"; LV.playing = e[1]; LV.evId = e[0] + e[1];
     mkPlayer(fr, e[1], function () { return Date.now() / 1000 - e[0]; },
       function () { setTimeout(function () { if (P.mode === "live") { destroyPlayer(); P.mode = null; LV.playing = null; LV.evId = null; liveInfo(); if (evNow(c)) tuneEvent(); } }, 300); },
-      function () { destroyPlayer(); P.mode = null; LV.playing = null; LV.evId = null; fr.setAttribute("data-k", "live"); fr.innerHTML = '<div class="tune evtune evslate" style="' + bvars(c.brand) + '"><div class="evsl">' + blogo(c.brand, "evlogo") + '<p class="k">Event of the Night</p><h3>We\'re having trouble with tonight\'s broadcast.</h3><p class="when">Stay tuned to ' + esc(c.site) + '</p><button class="btn" data-tune style="margin:10px auto 0">Try again</button></div></div>'; });
+      function () { destroyPlayer(); P.mode = null; LV.playing = null; LV.evId = null; fr.setAttribute("data-k", "live"); fr.innerHTML = '<div class="tune evtune evslate" style="' + bvars(c.brand) + '"><div class="evsl">' + blogo(c.brand, "evlogo") + '<p class="k">Event of the Night</p><h3>We\'re having trouble with tonight\'s broadcast.</h3><p class="when">Stay tuned to ' + esc(c.site) + '</p><button class="btn" data-tune style="margin:10px auto 0">Try again</button></div></div>'; if (IS_TV) tvFocus(fr.querySelector("[data-tune]")); });
   }
   function goLive(id) {  // tap on a channel card / chip: render the channel and start it inside the same gesture
     var h = "#/live/" + id; if (location.hash !== h) history.pushState(null, "", h);
     render(); LV.skip = 0; tuneLive();
   }
 
+  /* ---------------- TV remote (Fire TV / Google TV app): works with the injected tvnav.js ----------------
+     Back: close player -> previous screen -> home -> exit app (only from Home). Media keys drive the player API.
+     Focus is kept on the page (the YouTube iframe is never a focus target), restored after the player closes and
+     after Back, and never left hidden under the sticky header / tab bars. */
+  var NAVSTK = [], FOCUSMEM = {};
+  function navTop() { NAVSTK[NAVSTK.length ? NAVSTK.length - 1 : 0] = location.hash || "#/"; }
+  function tvCur() { return document.querySelector(".tvnav-focus"); }
+  function tvFocus(el) { if (el && window.__tvnav && window.__tvnav.focus) { window.__tvnav.focus(el, false); unhide(el); } }
+  function focusKey(el) {
+    if (!el) return null;
+    var attrs = ["data-play", "data-ch", "data-kind", "data-sort", "data-jump", "data-playq", "data-shuffle", "data-tune", "data-pp", "data-auto", "data-unm2", "data-close", "href"];
+    for (var k = 0; k < attrs.length; k++) if (el.hasAttribute(attrs[k])) return [attrs[k], el.getAttribute(attrs[k]), (el.textContent || "").trim().slice(0, 40)];
+    return null;
+  }
+  function findKey(key, root) {
+    if (!key) return null; var l = (root || document).querySelectorAll("[" + key[0] + "]");
+    var best = null;
+    for (var k = 0; k < l.length; k++) if (l[k].getAttribute(key[0]) === key[1]) { if ((l[k].textContent || "").trim().slice(0, 40) === key[2]) return l[k]; best = best || l[k]; }
+    return best;
+  }
+  function firstContent() {
+    var l = window.__tvnav ? window.__tvnav.candidates() : [];
+    var r = route()[0] || "";
+    if (r === "live") { var on = $(".chsw .chip.on"); if (on) return on; }
+    if (r === "search") { var q = $("#sq"); if (q) return q; }
+    for (var k = 0; k < l.length; k++) if (app.contains(l[k]) && !l[k].closest(".crumb") && l[k].getBoundingClientRect().top < innerHeight) return l[k];
+    return l[0] || null;
+  }
+  function tvAfterRender(mem) {
+    setTimeout(function () {
+      if (mem) { window.scrollTo(0, mem.y || 0); var el = findKey(mem.key, app); if (el) return tvFocus(el); }
+      tvFocus(firstContent());
+    }, 40);
+  }
+  function tvRefocus() { var c = tvCur(); if (c && document.contains(c)) tvFocus(c); }
+  function unhide(el) {  // keep the focused element out from under sticky bars and inside the viewport
+    if (!el || !el.getBoundingClientRect) return;
+    var inSheet = sheet.contains(el), sc = inSheet ? sheet : null, top = 0;
+    var bars = inSheet ? (getComputedStyle($(".ptop", sheet) || sheet).position === "sticky" ? [$(".ptop", sheet)] : []) : [$("header.top"), $(".tabs"), $(".yjump")];
+    bars.forEach(function (b) { if (b && !b.contains(el) && b.offsetHeight) { var r = b.getBoundingClientRect(); if (r.top <= 2 + top && r.bottom > top) top = r.bottom; } });
+    var r = el.getBoundingClientRect(), dy = 0, pad = 14;
+    if (r.top < 80 && !sc) return;  // tvnav.js is already scrolling this one to the centre
+    if (r.top < top + pad) dy = r.top - top - pad;
+    else if (r.bottom > innerHeight - pad && r.height < innerHeight - top) dy = r.bottom - innerHeight + pad;
+    if (dy) { if (sc) sc.scrollTop += dy; else window.scrollBy(0, dy); }
+  }
+  function stuckBars() {  // sticky bars currently pinned over scrolled content
+    var out = [], hd = $("header.top");
+    if (hd && window.scrollY > 4) out.push(hd);
+    [$(".tabs"), $(".yjump")].forEach(function (b) {
+      if (!b || !b.offsetHeight) return; var pv = b.previousElementSibling;
+      if (pv && pv.getBoundingClientRect().bottom < b.getBoundingClientRect().top - 2) out.push(b);
+    });
+    return out;
+  }
+  function stickyMask(dir) {  // temporarily take hidden-under-a-bar items (or the bars) out of the D-pad's reach
+    if (!sheet.hidden || !window.__tvnav) return [];
+    var bars = stuckBars(); if (!bars.length) return [];
+    var c = tvCur(), inBar = c && bars.some(function (b) { return b.contains(c); }), bot = 0, out = [];
+    bars.forEach(function (b) { bot = Math.max(bot, b.getBoundingClientRect().bottom); });
+    var list = window.__tvnav.candidates();
+    if (inBar) {
+      list.forEach(function (e) { if (!bars.some(function (b) { return b.contains(e); }) && e.getBoundingClientRect().top < bot - 2) out.push(e); });
+    } else if (c && dir === "up") {
+      var ct = c.getBoundingClientRect().top, above = list.some(function (e) { return !bars.some(function (b) { return b.contains(e); }) && e !== c && e.getBoundingClientRect().bottom <= ct + 2; });
+      if (above) list.forEach(function (e) { if (bars.some(function (b) { return b.contains(e); })) out.push(e); });
+    }
+    out = out.filter(function (e) { return !e.hasAttribute("inert"); });
+    out.forEach(function (e) { e.setAttribute("inert", ""); });
+    return out;
+  }
+  function installTV() {
+    var T = window.__tvnav; if (!T || T.__ww) return !!T;
+    T.__ww = 1; IS_TV = true; document.documentElement.classList.add("tv");
+    setTimeout(function () { var c = tvCur(); if ((!c || !document.contains(c) || c.closest("header.top")) && app.querySelector("a,button")) tvFocus(firstContent()); }, 60);
+    var key0 = T.key, back0 = T.back;
+    T.key = function (k, rep) {
+      if (k === "playpause") { if (!togglePlay()) { var tb = $("#lframe [data-tune]"); if (tb) { LV.skip = 0; tuneLive(); } } return; }
+      if (k === "ff") return seekBy(10);
+      var cc = tvCur(), car = $("#car");
+      if ((k === "left" || k === "right") && car && cc && cc.classList.contains("car-btn") && car.contains(cc)) { carGo(CAR.i + (k === "right" ? 1 : -1), true); return; }
+      if (k === "rw") return seekBy(-10);
+      var tmp = (k === "up" || k === "down" || k === "left" || k === "right") ? stickyMask(k) : [];
+      var before = tvCur(), br = before && before.getBoundingClientRect();
+      var r; try { r = key0.apply(T, arguments); } finally { tmp.forEach(function (e) { e.removeAttribute("inert"); }); }
+      var after = tvCur();
+      if ((k === "left" || k === "right") && br && after && after !== before && document.contains(before)) {  // end of a row: stay put instead of jumping diagonally (e.g. up into the header)
+        var ar = after.getBoundingClientRect();
+        if (Math.min(ar.bottom, br.bottom) - Math.max(ar.top, br.top) <= 0) { T.focus(before, false); return r; }
+      }
+      if (k !== "enter") setTimeout(function () { unhide(tvCur()); }, k === "menu" ? 450 : 30);
+      return r;
+    };
+    T.back = function () {
+      var a = document.activeElement;
+      if (a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA")) return back0.apply(T, arguments);  // close the keyboard first
+      if (document.fullscreenElement) return back0.apply(T, arguments);
+      if (!sheet.hidden) { var op = P.opener; closeSheet(); setTimeout(function () { var el = op && document.contains(op) ? op : findKey(P.openerKey, app); tvFocus(el || firstContent()); }, 60); return true; }
+      var r = route()[0] || "";
+      if (r === "" || r === "home") {
+        if (window.TVNative && window.TVNative.exitApp) { window.TVNative.exitApp(); return true; }
+        return false;
+      }
+      var curH = location.hash || "#/"; NAVSTK.pop();
+      while (NAVSTK.length && NAVSTK[NAVSTK.length - 1] === curH) NAVSTK.pop();
+      var prev = NAVSTK[NAVSTK.length - 1] || "#/"; if (prev === curH) prev = "#/"; if (!NAVSTK.length) NAVSTK.push(prev);
+      NAVSTK.push(location.hash || "#/");  // render() sees prev one below the top and treats it as Back
+      location.replace(prev.charAt(0) === "#" ? prev : "#/");
+      return true;
+    };
+    return true;
+  }
+  (function waitNav() { if (!installTV()) setTimeout(waitNav, 300); })();
+
   /* ---------------- router ---------------- */
   function route() { var h = location.hash.replace(/^#\/?/, ""); return h.split("/").map(function (x) { try { return decodeURIComponent(x); } catch (e) { return x; } }); }
   function render() {
+    var leaving = NAVSTK[NAVSTK.length - 1];
+    if (leaving) FOCUSMEM[leaving] = { y: window.scrollY, key: focusKey(tvCur()) };
+    var hh = location.hash || "#/", isBack = NAVSTK.length > 1 && NAVSTK[NAVSTK.length - 2] === hh;
+    if (isBack) NAVSTK.pop(); else if (leaving !== hh) NAVSTK.push(hh);
+    if (NAVSTK.length > 50) NAVSTK.splice(0, NAVSTK.length - 50);
     if (!sheet.hidden) closeSheet(true);
     if (P.mode === "live") { destroyPlayer(); P.mode = null; LV.playing = null; }
     clearInterval(LV.timer);
     var r = route();
     switch (r[0]) {
       case "promotions": viewPromotions(); break;
+      case "new": viewNew(); break;
       case "b": viewHub(r[1], r[2]); break;
       case "s": viewSeries(+r[1]); break;
       case "y": viewYear(r[1], r[2]); break;
@@ -486,37 +792,46 @@
       default: viewHome();
     }
     window.scrollTo(0, 0);
+    if (IS_TV) tvAfterRender(isBack ? FOCUSMEM[hh] : null);
   }
   window.addEventListener("hashchange", render);
   window.addEventListener("popstate", function () { if (!sheet.hidden) closeSheet(true); });
   document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !sheet.hidden) closeSheet(); });
   document.addEventListener("click", function (e) {
-    var a = e.target.closest("[data-unmute],[data-ch],[data-play],[data-close],[data-auto],[data-kind],[data-sort],[data-jump],[data-more],[data-playq],[data-shuffle],[data-tune],[data-smore]");
+    var a = e.target.closest("[data-car],[data-cardot],[data-pp],[data-unm2],[data-unmute],[data-ch],[data-play],[data-close],[data-auto],[data-kind],[data-sort],[data-jump],[data-more],[data-playq],[data-shuffle],[data-tune],[data-smore]");
     if (!a) return;
-    if (a.hasAttribute("data-unmute")) { e.preventDefault(); unmute(); return; }
+    if (a.hasAttribute("data-car")) { e.preventDefault(); carGo(CAR.i + +a.getAttribute("data-car"), IS_TV && false); return; }
+    if (a.hasAttribute("data-cardot")) { e.preventDefault(); carGo(+a.getAttribute("data-cardot")); return; }
+    if (a.hasAttribute("data-unmute") || a.hasAttribute("data-unm2")) { e.preventDefault(); unmute(); return; }
+    if (a.hasAttribute("data-pp")) { e.preventDefault(); if (!togglePlay() && LV.ch && $("#lframe [data-tune]")) { LV.skip = 0; tuneLive(); } return; }
     if (a.hasAttribute("data-ch")) { e.preventDefault(); goLive(a.getAttribute("data-ch")); return; }
     if (a.hasAttribute("data-play")) { e.preventDefault(); var i = +a.getAttribute("data-play"); if (a.hasAttribute("data-inq") && P.mode === "vod") { P.i = i; renderSheet(); } else openPlayer(i, a.getAttribute("data-q")); return; }
     if (a.hasAttribute("data-close")) { var href = a.getAttribute("href"); e.preventDefault(); if (href && href !== "#") { closeSheet(true); location.hash = href; } else closeSheet(); return; }
     e.preventDefault();
     if (a.hasAttribute("data-auto")) { LS.set("ww_auto", !autoplayOn()); a.classList.toggle("on", autoplayOn()); }
-    else if (a.hasAttribute("data-kind")) viewSeries(SER_OPTS.si, a.getAttribute("data-kind"), SER_OPTS.desc);
-    else if (a.hasAttribute("data-sort")) viewSeries(SER_OPTS.si, SER_OPTS.kind, !SER_OPTS.desc);
-    else if (a.hasAttribute("data-jump")) { var t = document.getElementById(a.getAttribute("data-jump")); if (t) t.scrollIntoView({ behavior: "smooth", block: "start" }); }
+    else if (a.hasAttribute("data-kind") || a.hasAttribute("data-sort")) {
+      var fk = focusKey(a), sy = window.scrollY;
+      if (a.hasAttribute("data-kind")) viewSeries(SER_OPTS.si, a.getAttribute("data-kind"), SER_OPTS.desc); else viewSeries(SER_OPTS.si, SER_OPTS.kind, !SER_OPTS.desc);
+      if (IS_TV) { if (fk && fk[0] === "data-sort") fk[2] = ""; window.scrollTo(0, sy); var nf = findKey(fk, app) || $(fk && fk[0] === "data-sort" ? "[data-sort]" : "[data-kind]", app); tvFocus(nf || firstContent()); }
+    }
+    else if (a.hasAttribute("data-jump")) { var t = document.getElementById(a.getAttribute("data-jump")); if (t) { if (IS_TV) { var f0 = t.querySelector("a,button"); t.scrollIntoView({ block: "start" }); if (f0) { window.__tvnav.focus(f0, false); setTimeout(function () { unhide(f0); }, 30); } } else t.scrollIntoView({ behavior: "smooth", block: "start" }); } }
     else if (a.hasAttribute("data-more")) {
       var p = a.getAttribute("data-more").split(":"), sec = a.parentNode, y = +p[1], s = S[+p[0]];
       var l = s[6].filter(function (i) { return (V[i][4] || 0) === y && (SER_OPTS.kind === "all" || V[i][6] === SER_OPTS.kind); }).sort(function (x1, x2) { return (V[x1][5] || "9").localeCompare(V[x2][5] || "9") || V[x1][1].localeCompare(V[x2][1]); });
       if (SER_OPTS.desc) l.reverse();
       sec.querySelector(".vl").innerHTML = l.map(function (i) { return row(i, SER_OPTS.q); }).join(""); a.remove();
+      if (IS_TV) tvFocus(sec.querySelectorAll(".vr")[40] || sec.querySelector(".vr"));
     }
-    else if (a.hasAttribute("data-smore")) { var box = $("#sres"), n = +a.getAttribute("data-smore"); box.querySelector("#vres .vl").insertAdjacentHTML("beforeend", box._r.v.slice(n, n + 60).map(function (i) { return row(i, box._q, { logo: 1, series: 1 }); }).join("")); if (n + 60 < box._r.v.length) a.setAttribute("data-smore", n + 60); else a.remove(); }
+    else if (a.hasAttribute("data-smore")) { var box = $("#sres"), n = +a.getAttribute("data-smore"); box.querySelector("#vres .vl").insertAdjacentHTML("beforeend", box._r.v.slice(n, n + 60).map(function (i) { return row(i, box._q, { logo: 1, series: 1 }); }).join("")); if (n + 60 < box._r.v.length) a.setAttribute("data-smore", n + 60); else { a.remove(); if (IS_TV) tvFocus(box.querySelectorAll("#vres .vr")[n]); } }
     else if (a.hasAttribute("data-playq")) { var q = QUEUES[a.getAttribute("data-playq")]; if (q && q.length) openPlayer(q[0], a.getAttribute("data-playq")); }
     else if (a.hasAttribute("data-shuffle")) { var bl = BY_BRAND[a.getAttribute("data-shuffle")].filter(function (i) { return V[i][6] !== "s"; }), rnd = seed(Date.now() % 1e9); var qs = pick(bl, 60, rnd); openPlayer(qs[0], queue(qs)); }
     else if (a.hasAttribute("data-tune")) { LV.skip = 0; tuneLive(); }
   });
-  setInterval(function () { var r = $("#liverail"); if (r && !document.hidden) r.innerHTML = CH.map(liveCard).join(""); }, 30000);
+  setInterval(function () { var r = $("#liverail"), f = tvCur(); if (r && !document.hidden && !(f && r.contains(f))) r.innerHTML = CH.map(liveCard).join("");
+    var c = $("#car"); if (c && !document.hidden && !(f && c.contains(f)) && !CAR.hold) { c.outerHTML = carHtml(); carInit(); } }, 60000);
   setInterval(function () { var n = Date.now() / 1000; document.querySelectorAll("#liverail [data-evcd]").forEach(function (el) { var d = +el.getAttribute("data-evcd") - n; if (d <= 0) { var r = $("#liverail"); if (r) r.innerHTML = CH.map(liveCard).join(""); } else el.textContent = "starts in " + clock(d); }); }, 1000);
 
-  yt(); // preload the IFrame API so the first tap can start playback synchronously
+  yt().then(initPlayer); // create the one persistent player now, so the first tap only has to call loadVideoById()
   load().then(render, function (e) { app.innerHTML = '<div class="wrap"><div class="empty">Could not load the catalog (' + esc(e.message) + "). Pull to refresh.</div></div>"; });
   if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(function () {});
 })();

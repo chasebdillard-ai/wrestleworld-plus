@@ -273,3 +273,63 @@ footer .wrap{display:flex;flex-direction:column;gap:6px}
 .evsl p{margin:0 0 4px;color:#ddd;font-size:13px}
 .evsl .when{font-weight:700;color:#fff}
 .evsl .cd{font:800 clamp(18px,3.6vw,30px)/1.2 var(--disp);color:var(--b1);font-variant-numeric:tabular-nums}
+/* ---------- persistent YouTube player dock (tracks #frame / #lframe) ---------- */
+.ytdock{position:fixed;left:0;top:0;width:320px;height:180px;z-index:35;background:#000;overflow:hidden}
+.ytdock.off{left:-10000px;top:0;width:320px;height:180px;pointer-events:none}
+.ytdock iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.frame.playing>*{visibility:hidden}
+.tvctl{display:none;gap:8px;align-items:center}
+.lvctl{display:none}
+/* ---------- TV (Fire TV / Google TV app, D-pad) ---------- */
+html.tv .tvctl{display:inline-flex}
+html.tv .lvctl{display:flex;margin-top:10px}
+html.tv .ytdock .unm{display:none}
+html.tv .tvctl .chip svg{flex:none}
+html.tv .rail{padding-top:14px;padding-bottom:18px;scroll-padding:0 40px}
+html.tv .rail.chips{padding-top:10px;padding-bottom:12px}
+html.tv .yjump .rail{padding-top:8px;padding-bottom:8px}
+html.tv .tabs .wrap{padding-top:6px;padding-bottom:6px}
+html.tv .sheet .ptop{position:relative}
+html.tv .sheet .frame{max-height:64vh}
+html.tv .lvgrid{grid-template-columns:1.6fr 1fr;align-items:start}
+html.tv .lvgrid .guide{margin-top:0}
+html.tv .tvnav-focus{outline:4px solid #F2C14E !important;outline-offset:3px !important;box-shadow:0 0 0 7px #fff,0 0 28px 10px #F2C14Ecc !important}
+html.tv :is(.vc,.vr,.sc,.pt,.lc,.chip,.yt,.wchip,.btn,.tabs a).tvnav-focus{position:relative;z-index:3}
+html.tv .chip.tvnav-focus,html.tv .tabs a.tvnav-focus,html.tv .top nav a.tvnav-focus{background:#F2C14E;color:#0B0B16}
+html.tv .chip.tvnav-focus small{color:#0B0B16}
+html.tv .vr.tvnav-focus,html.tv .vc.tvnav-focus{background:var(--card2)}
+/* ---------- Home hero carousel ---------- */
+.car{position:relative;margin:14px 0 6px;border-radius:var(--r2);overflow:hidden;height:max(420px,min(56vw,72vh));background:#000;border:1px solid var(--line)}
+.car-track{display:flex;height:100%;transition:transform .55s cubic-bezier(.2,.7,.2,1)}
+.slide{position:relative;flex:0 0 100%;height:100%;overflow:hidden}
+.slide .sbg,.slide .sbg img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.slide .sbg img{transform:scale(1.02);transition:transform 7s linear}
+.slide.on .sbg img{transform:scale(1.08)}
+.slide .sfade{position:absolute;inset:0;background:linear-gradient(0deg,#05050Bf5 0%,#05050Bc0 32%,#05050B30 62%,transparent 80%),linear-gradient(90deg,#05050Bcc 0%,transparent 60%)}
+.slide .stx{position:absolute;left:0;right:0;bottom:0;padding:18px 18px 44px;max-width:760px}
+.slide .slogo{display:block;height:34px;width:auto;max-width:130px;object-fit:contain;margin-bottom:10px;filter:drop-shadow(0 2px 8px #000)}
+.slide .stag{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:var(--b1);color:var(--bink);font:700 10.5px/1 var(--disp);letter-spacing:.1em;text-transform:uppercase}
+.slide .stag .dot{background:currentColor}
+.slide h2{margin:10px 0 6px;font:800 clamp(24px,4.6vw,52px)/1.04 var(--disp);letter-spacing:-.01em;text-transform:uppercase;text-shadow:0 4px 24px #000}
+.slide p{margin:0;color:#ffffffd0;font-size:clamp(13px,1.5vw,17px);line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-width:620px}
+.slide .sacts{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:14px}
+.slide .car-btn{background:var(--b1);color:var(--bink);border:0}
+.slide .car-btn svg{width:16px;height:16px}
+.slide .car-btn.live{background:#FF2D55;color:#fff}
+.slide .sbadge{font:700 11px/1 var(--disp);letter-spacing:.1em;text-transform:uppercase;color:#ffffffb0}
+.car-arr{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:#000a;border:1px solid #ffffff30;color:#fff;z-index:2}
+.car-arr svg{width:20px;height:20px}
+.car-arr.prev{left:10px}.car-arr.next{right:10px}.car-arr.next svg{transform:scaleX(-1)}
+.car-dots{position:absolute;left:0;right:0;bottom:14px;display:flex;justify-content:center;gap:7px;z-index:2}
+.cdot{width:8px;height:8px;border-radius:999px;background:#ffffff55;padding:0;border:0;transition:width .25s,background .25s}
+.cdot.on{width:24px;background:#fff}
+@media(max-width:640px){.car-arr{display:none}.car{margin-left:-16px;margin-right:-16px;border-radius:0;border-left:0;border-right:0}.slide .stx{padding:16px 16px 40px}}
+@media(min-width:900px){.slide .stx{padding:28px 40px 54px}}
+html.tv .car{height:min(72vh,56vw)}
+html.tv .car-dots .cdot{width:12px;height:12px}
+html.tv .car-dots .cdot.on{width:30px}
+html.tv .car-track{transition:none}
+html.tv .slide .sbg img{transition:none}
+html.tv .car-arr{display:none}
+@media(min-width:900px){.slide .stx{padding-left:76px}}
+html.tv .slide .stx{padding-left:40px}
