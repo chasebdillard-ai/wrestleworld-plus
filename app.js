@@ -549,6 +549,7 @@
     var st = pstate(), on = !!P.want, m = on && P.player && isMuted(P.player);
     document.querySelectorAll("[data-pp] span").forEach(function (s) { s.textContent = on && (st === 1 || st === 3) ? "Pause" : "Play"; });
     document.querySelectorAll("[data-unm2]").forEach(function (b) { b.hidden = !m; });
+    var lc = $(".lvctl"); if (lc) lc.hidden = !on && !$("#lframe [data-tune]");
   }
 
   /* ---------------- VOD player sheet ---------------- */
@@ -595,13 +596,13 @@
     app.innerHTML = '<div class="wrap"><div class="lv-h"><span class="kick">● Live 24/7</span></div><div class="rail chips chsw">' + CH.map(function (x) { return '<a class="chip' + (x.id === c.id ? " on" : "") + '" href="#/live/' + x.id + '" data-ch="' + x.id + '">' + esc(x.name) + "</a>"; }).join("") + '</div>' +
       '<div class="lvgrid" style="margin-top:14px"><div><div class="frame" id="lframe" style="border-radius:16px;overflow:hidden"><div class="tune"><button data-tune>' + "<span>" + ICON.play + "</span>Tune in to " + esc(c.name) + '</button></div></div><div class="lvctl">' + ctlHtml() + '</div><div class="lv-now" id="lnow"></div></div><div class="guide" id="lguide"></div></div><p style="color:var(--tx3);font-size:12.5px;margin-top:16px">' + esc(c.desc) + " Schedule is computed from the clock, so it is the same on every device.</p>" + foot() + "</div>";
     if (c.events) { LV.evId = null; evFrame(); }
-    liveInfo(); clearInterval(LV.timer); LV.timer = setInterval(liveInfo, c.events ? 1000 : 5000);
+    liveInfo(); ctlSync(); clearInterval(LV.timer); LV.timer = setInterval(liveInfo, c.events ? 1000 : 5000);
   }
   function evFrame() {  // not playing: tune button when the event is on the air, otherwise the branded "Coming" slate with countdown
     var c = LV.ch, fr = $("#lframe"); if (!c || !fr || P.mode === "live") return;
     var st = evState(c), e = st.ev, b = c.brand, k = st.live ? "live" : (e ? "c" + e[0] : "none");
     if (fr.getAttribute("data-k") === k) { var cd = fr.querySelector("[data-evcd]"); if (cd) cd.textContent = "Starts in " + clock(+cd.getAttribute("data-evcd") - Date.now() / 1000); return; }
-    fr.setAttribute("data-k", k);
+    fr.setAttribute("data-k", k); setTimeout(ctlSync, 0);
     var bg = '<div class="evbg" style="background-image:' + (e ? "url(" + evPoster(e) + ")," : "") + "linear-gradient(135deg," + B[b].b1 + ',#0B0B16 70%)"></div>';
     if (st.live) fr.innerHTML = '<div class="tune evtune" style="' + bvars(b) + '">' + bg + '<button data-tune><span>' + ICON.play + "</span>Watch " + esc(c.name) + "<small>" + esc(evTitle(e)) + " · Live now</small></button></div>";
     else fr.innerHTML = '<div class="tune evtune evslate" style="' + bvars(b) + '">' + bg + '<div class="evsl">' + blogo(b, "evlogo") + '<p class="k">Event of the Night</p>' +
