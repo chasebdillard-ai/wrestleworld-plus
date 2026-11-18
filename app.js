@@ -39,10 +39,11 @@
 
   /* ---------------- storage: continue watching + autoplay ---------------- */
   var LS = { get: function (k, d) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }, set: function (k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} } };
-  function cwAll() { return LS.get("ww_cw", {}); }
+  function cwAll() { return msess() && msess().access_token ? LS.get("ww_cw", {}) : {}; }
   function cwSave(id, t, d) {
     var c = cwAll();
-    if (d && t > d - 25) delete c[id]; else if (t > 20) c[id] = { t: Math.floor(t), d: Math.floor(d || 0), at: Date.now() };
+    if (!signedIn()) return;
+    if (d && t > d - 25) { if (c[id]) cwPush(id, 0, 0, true); delete c[id]; } else if (t > 20) { c[id] = { t: Math.floor(t), d: Math.floor(d || 0), at: Date.now() }; cwPush(id, t, d); }
     var ks = Object.keys(c).sort(function (a, b) { return c[b].at - c[a].at; }); ks.slice(40).forEach(function (k) { delete c[k]; });
     LS.set("ww_cw", c);
   }
@@ -72,7 +73,7 @@
   function th(i, extra) {
     var v = V[i], b = brandOf(i), c = cwAll()[v[0]];
     return '<div class="th" style="' + bvars(b) + '"><img src="' + thumb(v[0]) + '" alt="" loading="lazy" onerror="this.style.opacity=0">' +
-      (extra ? '<span class="bl">' + blogo(b) + "</span>" : "") + '<span class="dur">' + dur(v[2]) + "</span>" +
+      (extra ? '<span class="bl">' + blogo(b) + "</span>" : "") + '<span class="dur">' + dur(v[2]) + "</span>" + '<span class="wlb' + (wlHas(v[0]) ? " on" : "") + '" data-wl="' + v[0] + '" role="button" aria-label="' + (wlHas(v[0]) ? "Remove from Watch Later" : "Save to Watch Later") + '"></span>' +
       (c && c.d ? '<span class="pg"><i style="width:' + Math.min(100, Math.round(c.t / c.d * 100)) + '%"></i></span>' : "") + "</div>";
   }
   function kb(k) { return '<span class="kb ' + k + '">' + KIND[k] + "</span>"; }
@@ -132,6 +133,202 @@
     var n = chNow(c), v = V[n.i], nx = V[c.items[(n.k + 1) % c.items.length]];
     var art = ' style="background-image:' + (c.id === "network" ? "radial-gradient(120% 90% at 0% 0%,#22E4FF55,transparent 55%),radial-gradient(120% 90% at 100% 100%,#FF3D7F55,transparent 55%)," : "") + "url(" + thumb(v[0], 1) + '),linear-gradient(135deg,' + B[brandOf(n.i)].b1 + ',#0B0B16 70%)"';
     return '<a class="lc ch-' + c.id + '" href="#/live/' + c.id + '" data-ch="' + c.id + '"><div class="art"' + art + '><span class="tag"><i class="dot"></i>Live · ' + esc(c.name) + '</span><div class="chn"><b>' + esc(c.name) + "</b><small>Now: " + esc(v[1]) + '</small></div></div><div class="bar"><i style="width:' + Math.round(n.off / v[2] * 100) + '%"></i></div><div class="nx"><b>Next ' + tod(Date.now() / 1000 + n.left) + "</b> · " + esc(nx[1]) + "</div></a>";
+  }
+
+  /* ---------------- members: shared Supabase accounts (same as Blockbuster+ / WWE Unlimited / TNA Stream / WatchUFC) ----------------
+     Session lives in localStorage "hvplus_session" on this origin, so a member signed in on the old sites is already signed in here.
+     Members unlock Continue Watching + Watch Later (synced: public.ww_continue / public.ww_watch_later, own rows only; localStorage is the cache)
+     and live chat on the channels (public.comments site='ww', video_key='live:<channel>'). */
+  var SB = "https://cubbuiahnhgfpdeubldu.supabase.co", SBK = "sb_publishable_Sj8SNl5Zi0AwjxsIrNGNtQ_B--yHhYi", SKEY = "hvplus_session", PHONE_DOMAIN = "phone.blockbuster-plus.app";
+  var M = { after: null, msg: "", sync: 0, cwPush: {} };
+  function msess() { try { return JSON.parse(localStorage.getItem(SKEY) || "null"); } catch (e) { return null; } }
+  function msave(s) { try { if (s) localStorage.setItem(SKEY, JSON.stringify(s)); else localStorage.removeItem(SKEY); } catch (e) {} }
+  function signedIn() { var s = msess(); return !!(s && s.access_token && s.user && s.user.id); }
+  function muser() { var s = msess(); return (s && s.user) || {}; }
+  function mname() { var u = muser(), m = u.user_metadata || {}, e = u.email || ""; return m.display_name || (/@phone\./.test(e) ? "Member" : e.split("@")[0]) || "Member"; }
+  function mwho() { var e = muser().email || ""; return /@phone\.blockbuster-plus\.app$/.test(e) ? "+" + e.slice(1, e.indexOf("@")) : e; }
+  function sbPost(path, body) {
+    return fetch(SB + path, { method: "POST", headers: { apikey: SBK, "Content-Type": "application/json" }, body: JSON.stringify(body) })
+      .then(function (r) { return r.text().then(function (t) { var j = {}; try { j = t ? JSON.parse(t) : {}; } catch (e) {} if (!r.ok) { var er = new Error(j.msg || j.error_description || j.message || ("Error " + r.status)); er.code = j.error_code || j.code; throw er; } return j; }); });
+  }
+  function setSess(x) {
+    var s = x && x.session && x.session.access_token ? x.session : x;
+    if (!s || !s.access_token) return false;
+    msave({ access_token: s.access_token, refresh_token: s.refresh_token, expires_at: s.expires_at || Math.floor(Date.now() / 1000) + (s.expires_in || 3600), user: s.user || x.user });
+    return true;
+  }
+  function mtoken() {
+    var s = msess(); if (!s || !s.access_token) return Promise.resolve(null);
+    if ((s.expires_at || 0) - Date.now() / 1000 > 60) return Promise.resolve(s);
+    return sbPost("/auth/v1/token?grant_type=refresh_token", { refresh_token: s.refresh_token }).then(function (j) { return setSess(j) ? msess() : null; }, function (e) {
+      if (/invalid|not found|revoked|expired/i.test(String(e.message) + e.code)) { msave(null); mcheck(); }
+      return null;
+    });
+  }
+  function sbRest(method, path, body, prefer) {
+    return mtoken().then(function (s) {
+      if (!s) throw new Error("signin");
+      return fetch(SB + "/rest/v1/" + path, { method: method, headers: { apikey: SBK, Authorization: "Bearer " + s.access_token, "Content-Type": "application/json", Prefer: prefer || "return=minimal" }, body: body ? JSON.stringify(body) : undefined })
+        .then(function (r) { if (!r.ok) throw new Error("http " + r.status); return r.status === 204 ? null : r.text().then(function (t) { return t ? JSON.parse(t) : null; }); });
+    });
+  }
+  function toEmail(id) {
+    id = String(id || "").trim();
+    if (id.indexOf("@") > 0) return { email: id.toLowerCase(), phone: "" };
+    var dg = id.replace(/\D/g, ""); if (dg.length === 10) dg = "1" + dg; if (dg.length < 11) return null;
+    return { email: "p" + dg + "@" + PHONE_DOMAIN, phone: "+" + dg };
+  }
+  function friendly(e) {
+    var m = String(e && e.message || ""), c = String(e && e.code || "");
+    if (/invalid_credentials|Invalid login/i.test(c + m)) return "That email/phone and password don't match.";
+    if (/already|exists|registered/i.test(c + m)) return "That email or phone already has an account. Sign in instead.";
+    if (/weak|least 6|password/i.test(c + m)) return "Password needs at least 6 characters.";
+    if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return "Can't reach the server. Check your connection.";
+    return m || "Something went wrong. Try again.";
+  }
+  function mcheck() {  // a different (or no) member on this device: drop the other member's cached lists
+    var id = signedIn() ? muser().id : "";
+    if (LS.get("ww_uid", "") !== id) { LS.set("ww_cw", {}); LS.set("ww_wl", []); LS.set("ww_uid", id); }
+    updAcct();
+  }
+  function updAcct() {
+    var hd = $("header.top .wrap"); if (!hd) return;
+    var a = $("a.acct", hd);
+    if (!a) { hd.insertAdjacentHTML("beforeend", '<a class="acct" href="#/account"></a>'); a = $("a.acct", hd); var ib = $("a.ib", hd); if (ib) hd.insertBefore(a, ib); }
+    if (signedIn()) { a.innerHTML = "<i>" + esc(mname().charAt(0).toUpperCase()) + "</i><span>" + esc(mname()) + "</span>"; a.setAttribute("aria-label", "Account: " + mname()); a.classList.add("in"); }
+    else { a.innerHTML = "<span>Sign in</span>"; a.setAttribute("aria-label", "Sign in or sign up"); a.classList.remove("in"); }
+  }
+  function askSignIn(why) { M.msg = why || ""; M.after = location.hash || "#/"; location.hash = "#/account"; }
+  function unlockCard(what) {
+    return '<section class="sec unlock"><div class="unl"><b>Sign up free to unlock ' + esc(what || "Continue Watching, Watch Later and live chat") + '</b><p>Same account as WWE Unlimited, TNA Stream and Blockbuster+. Free, no card.</p><div class="acts"><a class="btn" href="#/account" data-auth="up">Sign up free</a><a class="btn gh" href="#/account" data-auth="in">Sign in</a></div></div></section>';
+  }
+  /* --- Watch Later + Continue Watching sync --- */
+  function wlAll() { return signedIn() ? LS.get("ww_wl", []) : []; }
+  function wlHas(id) { return wlAll().some(function (x) { return x.id === id; }); }
+  function wlToggle(id) {
+    if (!signedIn()) { askSignIn("Watch Later"); return; }
+    var l = LS.get("ww_wl", []), on = l.some(function (x) { return x.id === id; });
+    if (on) { l = l.filter(function (x) { return x.id !== id; }); sbRest("DELETE", "ww_watch_later?video_id=eq." + encodeURIComponent(id)).catch(function () {}); }
+    else { l.unshift({ id: id, at: Date.now() }); sbRest("POST", "ww_watch_later?on_conflict=user_id,video_id", { video_id: id, added_at: new Date().toISOString() }, "resolution=merge-duplicates,return=minimal").catch(function () {}); }
+    LS.set("ww_wl", l.slice(0, 300));
+    document.querySelectorAll('[data-wl="' + id + '"]').forEach(wlPaint);
+    return !on;
+  }
+  function wlPaint(b) {
+    var on = wlHas(b.getAttribute("data-wl"));
+    b.classList.toggle("on", on);
+    if (b.classList.contains("chip")) b.innerHTML = (on ? "✓ Saved to Watch Later" : "＋ Watch Later");
+    b.setAttribute("aria-label", on ? "Remove from Watch Later" : "Save to Watch Later");
+  }
+  function cwPush(id, t, d, gone) {
+    if (!signedIn()) return;
+    if (gone) { sbRest("DELETE", "ww_continue?video_id=eq." + encodeURIComponent(id)).catch(function () {}); return; }
+    var now = Date.now(); if (now - (M.cwPush[id] || 0) < 15000) return; M.cwPush[id] = now;
+    sbRest("POST", "ww_continue?on_conflict=user_id,video_id", { video_id: id, pos: Math.floor(t), dur: Math.floor(d || 0), updated_at: new Date().toISOString() }, "resolution=merge-duplicates,return=minimal").catch(function () {});
+  }
+  function msync() {
+    if (!signedIn()) return Promise.resolve(false);
+    var n = ++M.sync;
+    return Promise.all([sbRest("GET", "ww_watch_later?select=video_id,added_at&order=added_at.desc&limit=300"), sbRest("GET", "ww_continue?select=video_id,pos,dur,updated_at&order=updated_at.desc&limit=40")]).then(function (r) {
+      if (n !== M.sync || !signedIn()) return false;
+      var before = JSON.stringify([LS.get("ww_wl", []), LS.get("ww_cw", {})]);
+      LS.set("ww_wl", (r[0] || []).map(function (x) { return { id: x.video_id, at: Date.parse(x.added_at) }; }));
+      var c = LS.get("ww_cw", {});
+      (r[1] || []).forEach(function (x) { var at = Date.parse(x.updated_at); if (!c[x.video_id] || c[x.video_id].at < at) c[x.video_id] = { t: x.pos, d: x.dur, at: at }; });
+      LS.set("ww_cw", c);
+      return before !== JSON.stringify([LS.get("ww_wl", []), LS.get("ww_cw", {})]);
+    }, function () { return false; });
+  }
+  window.WW_M = { cwSave: function (a, b, c) { cwSave(a, b, c); }, msync: function () { return msync(); }, wlToggle: function (id) { return wlToggle(id); }, rest: function (m, p, b, pr) { return sbRest(m, p, b, pr); } };  // test hooks
+  function afterSync(changed) {
+    var r = route()[0] || "";
+    if (!changed || !sheet.hidden || P.mode) return;
+    if (r === "" || r === "home" || r === "later") { var f = tvCur(), k = focusKey(f), y = window.scrollY; if (r === "later") viewLater(); else viewHome(); window.scrollTo(0, y); if (IS_TV) tvFocus(findKey(k, app) || firstContent()); }
+  }
+  /* --- account page --- */
+  function viewAccount(mode) {
+    setTitle("Account"); nav("");
+    if (signedIn()) {
+      app.innerHTML = '<div class="wrap"><div class="sp-h"><span class="kick">Member</span><h1>' + esc(mname()) + '</h1><p>' + esc(mwho()) + '</p></div><div class="acctbox"><p>You\'re signed in. Continue Watching and Watch Later sync across your devices, and you can chat on Live TV.</p><div class="acts"><a class="btn" href="#/later">Watch Later</a><a class="btn gh" href="#/live">Live TV chat</a><button class="btn gh" data-signout>Sign out</button></div></div>' + foot() + "</div>";
+      return;
+    }
+    var up = mode !== "in";
+    app.innerHTML = '<div class="wrap"><form class="authf" novalidate><span class="kick">' + (M.msg ? "Members only · " + esc(M.msg) : "WrestleWorld+ members") + "</span><h1>" + (up ? "Sign up free" : "Sign in") + "</h1><p>" +
+      (up ? "Unlock Continue Watching, Watch Later and live chat on every channel. Free, no card." : "Welcome back. Your WWE Unlimited, TNA Stream or Blockbuster+ account works here too.") + "</p>" +
+      (up ? '<label for="au-name">Display name</label><input id="au-name" autocomplete="nickname" maxlength="40">' : "") +
+      '<label for="au-id">Email or phone number</label><input id="au-id" autocomplete="username" inputmode="email" autocapitalize="off" spellcheck="false" required>' +
+      (up ? '<label for="au-ph">Phone (optional, if you used email above)</label><input id="au-ph" type="tel" autocomplete="tel">' : "") +
+      '<label for="au-pw">Password</label><input id="au-pw" type="password" autocomplete="' + (up ? "new-password" : "current-password") + '" minlength="6" required>' +
+      '<div class="err" role="alert"></div><button class="btn go" type="submit">' + (up ? "Create free account" : "Sign in") + "</button>" +
+      '<p class="sw">' + (up ? 'Already a member? <a href="#/account" data-auth="in">Sign in</a>' : 'New here? <a href="#/account" data-auth="up">Sign up free</a>') + "</p></form>" + foot() + "</div>";
+    var f = $("form.authf"), err = $(".err", f), go = $(".go", f);
+    f.addEventListener("submit", function (ev) {
+      ev.preventDefault(); err.textContent = "";
+      var who = toEmail($("#au-id", f).value), pw = $("#au-pw", f).value;
+      if (!who) { err.textContent = "Enter an email or a full phone number with area code."; return; }
+      if (pw.length < 6) { err.textContent = "Password needs at least 6 characters."; return; }
+      go.disabled = true; go.textContent = up ? "Creating…" : "Signing in…";
+      var p;
+      if (up) {
+        var nm = ($("#au-name", f).value || "").trim(), ph = ($("#au-ph", f).value || "").trim() || who.phone;
+        p = sbPost("/auth/v1/signup", { email: who.email, password: pw, data: { display_name: nm || (who.phone ? "Member" : who.email.split("@")[0]), phone: ph, signup_site: "wrestleworld" } })
+          .then(function (j) { if (setSess(j)) return msess(); return sbPost("/auth/v1/token?grant_type=password", { email: who.email, password: pw }); });
+      } else p = sbPost("/auth/v1/token?grant_type=password", { email: who.email, password: pw });
+      p.then(function (j) {
+        if (j && j.access_token && !signedIn()) setSess(j);
+        if (!signedIn()) throw new Error("Couldn't sign in.");
+        mcheck(); var to = M.after && M.after !== "#/account" ? M.after : "#/"; M.after = null; M.msg = "";
+        msync().then(function () { if (location.hash === to) render(); else location.hash = to; });
+      }, function (e) { err.textContent = friendly(e); go.disabled = false; go.textContent = up ? "Create free account" : "Sign in"; });
+    });
+    if (IS_TV) setTimeout(function () { tvFocus($("input", f)); }, 60);
+  }
+  function signOut() {
+    var s = msess();
+    if (s && s.access_token) fetch(SB + "/auth/v1/logout", { method: "POST", headers: { apikey: SBK, Authorization: "Bearer " + s.access_token } }).catch(function () {});
+    msave(null); mcheck(); location.hash = "#/";
+  }
+  function viewLater() {
+    setTitle("Watch Later"); nav("home");
+    if (!signedIn()) { app.innerHTML = '<div class="wrap"><div class="sp-h"><span class="kick">Members</span><h1>Watch Later</h1><p>Save videos to watch later on any device.</p></div>' + unlockCard("Watch Later") + foot() + "</div>"; return; }
+    var l = wlAll().map(function (x) { return IDX[x.id]; }).filter(function (i) { return i != null; }), q = queue(l);
+    app.innerHTML = '<div class="wrap"><div class="sp-h"><span class="kick">' + esc(mname()) + '</span><h1>Watch Later</h1><p>' + l.length + " saved video" + (l.length === 1 ? "" : "s") + ". Tap ✓ on a video to remove it.</p></div>" +
+      (l.length ? '<div class="tools"><button class="chip" data-playq="' + q + '">' + ICON.play.replace("<svg", '<svg width="14" height="14"') + 'Play all</button></div><div class="vl cols">' + l.map(function (i) { return row(i, q, { logo: 1, series: 1 }); }).join("") + "</div>"
+        : '<div class="empty">Nothing saved yet. Use “＋ Watch Later” in the player or the bookmark on any video.</div>') + foot() + "</div>";
+  }
+  /* --- live chat (all 6 channels) --- */
+  var CHAT = { key: null, t: null, last: {}, busy: false };
+  function chatHtml(c) {
+    return '<section class="chat" id="lchat" aria-label="Live chat"><h3><span class="lvb">LIVE</span>Live chat <small>' + esc(c.name) + '</small></h3><ul aria-live="polite"><li class="empty">Loading chat…</li></ul>' +
+      (signedIn() ? '<form class="chatf"><input maxlength="300" placeholder="Say something…" aria-label="Chat message" enterkeyhint="send"><button class="btn go" type="submit">Send</button></form><div class="err" role="alert"></div>'
+        : '<div class="unl small"><b>Sign up free to chat</b><p>Anyone can read. Members can post.</p><div class="acts"><a class="btn" href="#/account" data-auth="up">Sign up free</a><a class="btn gh" href="#/account" data-auth="in">Sign in</a></div></div>') + "</section>";
+  }
+  function chatStart(c) {
+    clearInterval(CHAT.t); CHAT.key = "live:" + c.id; CHAT.last = {};
+    var box = $("#lchat"); if (!box) return;
+    var f = $("form.chatf", box);
+    if (f) f.addEventListener("submit", function (ev) {
+      ev.preventDefault(); var inp = $("input", f), v = (inp.value || "").trim(), er = $(".err", box); if (!v) return;
+      er.textContent = ""; inp.disabled = true;
+      sbRest("POST", "comments", { site: "ww", video_key: CHAT.key, body: v }, "return=representation").then(function () { inp.value = ""; inp.disabled = false; chatPoll(); },
+        function (e) { inp.disabled = false; er.textContent = /signin/.test(e.message) ? "Please sign in again." : "Couldn't send. Try again."; });
+    });
+    chatPoll(); CHAT.t = setInterval(function () { if (!$("#lchat")) { clearInterval(CHAT.t); return; } if (!document.hidden) chatPoll(); }, 5000);
+  }
+  function chatPoll() {
+    var box = $("#lchat"), key = CHAT.key; if (!box || CHAT.busy) return; CHAT.busy = true;
+    var q = SB + "/rest/v1/comments?select=id,user_id,display_name,body,created_at&site=eq.ww&video_key=eq." + encodeURIComponent(key) + "&order=created_at.desc&limit=60";
+    mtoken().then(function (s) { return fetch(q, { headers: { apikey: SBK, Authorization: "Bearer " + (s ? s.access_token : SBK) } }); })
+      .then(function (r) { return r.ok ? r.json() : []; }, function () { return null; })
+      .then(function (l) {
+        CHAT.busy = false; if (!l || key !== CHAT.key || !document.contains(box)) return;
+        var ul = $("ul", box), me = signedIn() ? muser().id : null, atEnd = ul.scrollTop + ul.clientHeight >= ul.scrollHeight - 30;
+        l = l.reverse(); var ids = l.map(function (x) { return x.id; }).join(",");
+        if (ids === CHAT.ids) return; CHAT.ids = ids;
+        ul.innerHTML = l.length ? l.map(function (c) { return '<li data-id="' + c.id + '"><b>' + esc(c.display_name) + "</b> " + esc(c.body) + (c.user_id === me ? ' <button class="cx" data-cdel="' + c.id + '" aria-label="Delete my message">✕</button>' : "") + "</li>"; }).join("")
+          : '<li class="empty">No messages yet. Say hi!</li>';
+        if (atEnd || !CHAT.scrolled) { ul.scrollTop = ul.scrollHeight; CHAT.scrolled = true; }
+      });
   }
 
   /* ---------------- Home hero carousel (2026-11-18): EOTN WWE/TNA (+ next night), Recently Added, featured ---------------- */
@@ -237,6 +434,9 @@
     var cw = cwAll(), ids = Object.keys(cw).filter(function (id) { return IDX[id] != null; }).sort(function (a, b) { return cw[b].at - cw[a].at; }).slice(0, 15).map(function (id) { return IDX[id]; });
     var nw = newest(15), qnw = queue(nw);
     var newRow = '<section class="sec" id="newrow"><div class="sh"><div><h2>Recently Added</h2><p>The newest full shows and matches across every promotion.</p></div><a class="more" href="#/new">See all</a></div><div class="rail">' + nw.map(function (i) { return card(i, qnw); }).join("") + "</div></section>";
+    if (!signedIn()) h += unlockCard();
+    var wl = wlAll().map(function (x) { return IDX[x.id]; }).filter(function (i) { return i != null; }).slice(0, 20), qwl = queue(wl);
+    if (wl.length) h += '<section class="sec" id="wlrow"><div class="sh"><div><h2>Watch Later</h2></div><a class="more" href="#/later">See all</a></div><div class="rail">' + wl.map(function (i) { return card(i, qwl); }).join("") + "</div></section>";
     if (ids.length) h += '<section class="sec" id="cwrow"><div class="sh"><div><h2>Continue watching</h2></div></div><div class="rail">' + ids.map(function (i) { return card(i); }).join("") + "</div></section>";
     h += newRow;
     h += '<section class="sec"><div class="sh"><div><h2>Promotions</h2><p>Each hub is branded to its promotion, sorted by name and year.</p></div></div><div class="pg-grid">' + ORDER.map(ptile).join("") + "</div></section>";
@@ -570,7 +770,7 @@
     if (start || !$("#frame", sheet)) sheet.innerHTML = '<div class="ptop"><div class="pbar"><button class="ib" data-close aria-label="Close">' + ICON.x + '</button>' + ctlHtml() + '<span class="sp"></span><img id="plogo" src="' + x.logo + '" alt="" style="height:24px;width:auto;max-width:100px;object-fit:contain"></div><div class="frame" id="frame"></div></div><div id="pbody"></div>';
     else $("#plogo").src = x.logo;
     $("#pbody").innerHTML = '<div class="pinfo" style="' + bvars(b) + '"><h2>' + esc(v[1]) + '</h2><div class="meta">' + kb(v[6]) + "<span>" + esc(fdate(v)) + "</span><span>· " + dur(v[2]) + '</span><a href="#/s/' + v[3] + '" data-close style="color:var(--b1x);font-weight:700">· ' + esc(S[v[3]][1]) + "</a></div>" +
-      '<div class="tools"><button class="tgl' + (autoplayOn() ? " on" : "") + '" data-auto><i></i>Autoplay next</button>' + (cw ? '<span class="kb">Resumed at ' + clock(cw.t) + "</span>" : "") + "</div>" +
+      '<div class="tools"><button class="chip wlc' + (wlHas(v[0]) ? " on" : "") + '" data-wl="' + v[0] + '">' + (wlHas(v[0]) ? "✓ Saved to Watch Later" : "＋ Watch Later") + '</button><button class="tgl' + (autoplayOn() ? " on" : "") + '" data-auto><i></i>Autoplay next</button>' + (cw ? '<span class="kb">Resumed at ' + clock(cw.t) + "</span>" : "") + "</div>" +
       (names.length ? '<div class="wlinks">' + names.map(function (p) { return '<a href="#/w/' + p[1] + '" data-close>' + esc(p[0][0]) + "</a>"; }).join("") + "</div>" : "") +
       (up.length ? '<div class="upn"><h3>Up next</h3><div class="vl">' + up.map(function (j) { return row(j, null, {}); }).join("") + "</div></div>" : "") + "</div>";
     sheet.querySelectorAll(".upn [data-play]").forEach(function (a) { a.setAttribute("data-inq", "1"); });
@@ -594,9 +794,9 @@
     var c = chById(id || LS.get("ww_ch", "network")); LS.set("ww_ch", c.id); LV.ch = c;
     setTitle(c.name); nav("live");
     app.innerHTML = '<div class="wrap"><div class="lv-h"><span class="kick">● Live 24/7</span></div><div class="rail chips chsw">' + CH.map(function (x) { return '<a class="chip' + (x.id === c.id ? " on" : "") + '" href="#/live/' + x.id + '" data-ch="' + x.id + '">' + esc(x.name) + "</a>"; }).join("") + '</div>' +
-      '<div class="lvgrid" style="margin-top:14px"><div><div class="frame" id="lframe" style="border-radius:16px;overflow:hidden"><div class="tune"><button data-tune>' + "<span>" + ICON.play + "</span>Tune in to " + esc(c.name) + '</button></div></div><div class="lvctl">' + ctlHtml() + '</div><div class="lv-now" id="lnow"></div></div><div class="guide" id="lguide"></div></div><p style="color:var(--tx3);font-size:12.5px;margin-top:16px">' + esc(c.desc) + " Schedule is computed from the clock, so it is the same on every device.</p>" + foot() + "</div>";
+      '<div class="lvgrid" style="margin-top:14px"><div><div class="frame" id="lframe" style="border-radius:16px;overflow:hidden"><div class="tune"><button data-tune>' + "<span>" + ICON.play + "</span>Tune in to " + esc(c.name) + '</button></div></div><div class="lvctl">' + ctlHtml() + '</div><div class="lv-now" id="lnow"></div></div><div><div class="guide" id="lguide"></div>' + chatHtml(c) + '</div></div><p style="color:var(--tx3);font-size:12.5px;margin-top:16px">' + esc(c.desc) + " Schedule is computed from the clock, so it is the same on every device.</p>" + foot() + "</div>";
     if (c.events) { LV.evId = null; evFrame(); }
-    liveInfo(); ctlSync(); clearInterval(LV.timer); LV.timer = setInterval(liveInfo, c.events ? 1000 : 5000);
+    chatStart(c); liveInfo(); ctlSync(); clearInterval(LV.timer); LV.timer = setInterval(liveInfo, c.events ? 1000 : 5000);
   }
   function evFrame() {  // not playing: tune button when the event is on the air, otherwise the branded "Coming" slate with countdown
     var c = LV.ch, fr = $("#lframe"); if (!c || !fr || P.mode === "live") return;
@@ -785,6 +985,8 @@
     switch (r[0]) {
       case "promotions": viewPromotions(); break;
       case "new": viewNew(); break;
+      case "later": viewLater(); break;
+      case "account": viewAccount(M.mode); M.mode = null; break;
       case "b": viewHub(r[1], r[2]); break;
       case "s": viewSeries(+r[1]); break;
       case "y": viewYear(r[1], r[2]); break;
@@ -796,12 +998,16 @@
     window.scrollTo(0, 0);
     if (IS_TV) tvAfterRender(isBack ? FOCUSMEM[hh] : null);
   }
-  window.addEventListener("hashchange", render);
+  window.addEventListener("hashchange", function () { if (location.hash === "#/account" && !M.after) { var p = NAVSTK[NAVSTK.length - 1]; if (p && p !== "#/account") M.after = p; } render(); });
   window.addEventListener("popstate", function () { if (!sheet.hidden) closeSheet(true); });
   document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !sheet.hidden) closeSheet(); });
   document.addEventListener("click", function (e) {
-    var a = e.target.closest("[data-car],[data-cardot],[data-pp],[data-unm2],[data-unmute],[data-ch],[data-play],[data-close],[data-auto],[data-kind],[data-sort],[data-jump],[data-more],[data-playq],[data-shuffle],[data-tune],[data-smore]");
+    var a = e.target.closest("[data-wl],[data-signout],[data-auth],[data-cdel],[data-car],[data-cardot],[data-pp],[data-unm2],[data-unmute],[data-ch],[data-play],[data-close],[data-auto],[data-kind],[data-sort],[data-jump],[data-more],[data-playq],[data-shuffle],[data-tune],[data-smore]");
     if (!a) return;
+    if (a.hasAttribute("data-wl")) { e.preventDefault(); e.stopPropagation(); wlToggle(a.getAttribute("data-wl")); return; }
+    if (a.hasAttribute("data-signout")) { e.preventDefault(); signOut(); return; }
+    if (a.hasAttribute("data-auth")) { e.preventDefault(); M.mode = a.getAttribute("data-auth"); if (route()[0] !== "account") M.after = location.hash || "#/"; if (location.hash === "#/account") render(); else location.hash = "#/account"; return; }
+    if (a.hasAttribute("data-cdel")) { e.preventDefault(); var cid = a.getAttribute("data-cdel"); sbRest("DELETE", "comments?id=eq." + cid).then(function () { CHAT.ids = null; chatPoll(); }, function () {}); return; }
     if (a.hasAttribute("data-car")) { e.preventDefault(); carGo(CAR.i + +a.getAttribute("data-car"), IS_TV && false); return; }
     if (a.hasAttribute("data-cardot")) { e.preventDefault(); carGo(+a.getAttribute("data-cardot")); return; }
     if (a.hasAttribute("data-unmute") || a.hasAttribute("data-unm2")) { e.preventDefault(); unmute(); return; }
@@ -834,6 +1040,8 @@
   setInterval(function () { var n = Date.now() / 1000; document.querySelectorAll("#liverail [data-evcd]").forEach(function (el) { var d = +el.getAttribute("data-evcd") - n; if (d <= 0) { var r = $("#liverail"); if (r) r.innerHTML = CH.map(liveCard).join(""); } else el.textContent = "starts in " + clock(d); }); }, 1000);
 
   yt().then(initPlayer); // create the one persistent player now, so the first tap only has to call loadVideoById()
-  load().then(render, function (e) { app.innerHTML = '<div class="wrap"><div class="empty">Could not load the catalog (' + esc(e.message) + "). Pull to refresh.</div></div>"; });
+  mcheck();
+  window.addEventListener("storage", function (e) { if (e.key === SKEY) { mcheck(); } });
+  load().then(function () { render(); msync().then(afterSync); setInterval(function () { if (!document.hidden) msync().then(afterSync); }, 120000); }, function (e) { app.innerHTML = '<div class="wrap"><div class="empty">Could not load the catalog (' + esc(e.message) + "). Pull to refresh.</div></div>"; });
   if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(function () {});
 })();
