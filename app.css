@@ -285,7 +285,7 @@ footer .wrap{display:flex;flex-direction:column;gap:6px}
 .ytdock iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
 .netbug{position:absolute;right:max(10px,3%);bottom:max(10px,6%);z-index:4;width:9%;min-width:34px;height:auto;opacity:.55;pointer-events:none;user-select:none;-webkit-user-select:none;filter:drop-shadow(0 0 2px #0008)}
 .netbug[hidden]{display:none}
-.netbug.nb-wwetv{width:7.5%;min-width:30px}
+.netbug.nb-wwetv{width:6%;min-width:26px}
 .netbug.nb-tna{width:9.5%;min-width:36px}
 .ytdock:fullscreen .netbug{right:3%;bottom:6%}
 .frame.playing>*{visibility:hidden}

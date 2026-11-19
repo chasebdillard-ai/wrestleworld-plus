@@ -641,9 +641,9 @@
   dock.innerHTML = '<iframe id="ytp" title="Video player" aria-hidden="true" tabindex="-1" allow="autoplay; encrypted-media; fullscreen" allowfullscreen ' +
     'src="https://www.youtube.com/embed/?enablejsapi=1&playsinline=1&rel=0&modestbranding=1&autoplay=0&fs=1&origin=' + encodeURIComponent(location.origin) + '"></iframe>';
   document.body.appendChild(dock);
-  /* On-air network bug (2026-11-18): translucent logo bottom-right of the player, only while the WWE Network (id wwetv) or
+  /* On-air network bug (2026-11-18): translucent logo bottom-right of the player, only while UPN (id wwetv) or
      Spike TV (id tna) live channels play. Lives inside the dock above the iframe, pointer-events:none so taps / remote pass through. */
-  var BUG = { wwetv: "bug-wwe-network.svg", tna: "bug-spike-tv.svg" };
+  var BUG = { wwetv: "bug-upn.svg", tna: "bug-spike-tv.svg" };
   dock.insertAdjacentHTML("beforeend", '<img class="netbug" alt="" aria-hidden="true" draggable="false" hidden>');
   function bugSync() {
     var im = dock.querySelector(".netbug"); if (!im) return;
