@@ -341,13 +341,16 @@
     l.sort(function (a, c) { return V[c][5].localeCompare(V[a][5]) || V[c][2] - V[a][2]; });
     return l.slice(0, n);
   }
-  function evNextNight(c) {  // the following night's pick (a different ET day than the current/upcoming one)
-    var now = Date.now() / 1000, cur = null, L = c.events;
+  function evNextNights(c, max) {  // upcoming nights after the current/upcoming one: first pick of each later ET day (data-driven from the schedule)
+    var now = Date.now() / 1000, cur = null, L = c.events, out = [], seen = {};
     for (var k = 0; k < L.length; k++) if (now < L[k][0] + L[k][3]) { cur = L[k]; break; }
-    if (!cur) return null;
-    for (k = 0; k < L.length; k++) if (L[k][0] > cur[0] && etDk(L[k][0]) !== etDk(cur[0])) return L[k];
-    return null;
+    if (!cur) return out;
+    seen[etDk(cur[0])] = 1;
+    for (k = 0; k < L.length && out.length < (max || 2); k++) if (L[k][0] > cur[0] && !seen[etDk(L[k][0])]) { seen[etDk(L[k][0])] = 1; out.push(L[k]); }
+    return out;
   }
+  function evNextNight(c) { return evNextNights(c, 1)[0] || null; }
+  function etHr(x) { return etTime(x).replace(":00 ", " "); }  // "8 PM ET"
   function vlrQueue() { return (window.WW_VLR || []).map(function (id) { return IDX[id]; }).filter(function (i) { return i != null; }); }
   function brandRecent(b) { var l = BY_BRAND[b].filter(function (i) { return V[i][5] && V[i][2] >= 900; }); l.sort(function (a, c) { return V[c][5].localeCompare(V[a][5]); }); return l[0] != null ? l[0] : BY_BRAND[b][0]; }
   function carSlides() {
@@ -358,9 +361,8 @@
       if (e) out.push({ b: b, img: ytImg(e[1]), logo: 1, tag: (st.live ? '<i class="dot"></i>Live now · ' : "") + "Event of the Night",
         title: evTitle(e), sub: (evSub(e) ? evSub(e) + " · " : "") + (st.live ? "On the air now on " + c.name + ". Jump in where everyone else is." : etDay(e[0]) + " at " + etTime(e[0]) + " on " + c.name + ". One event, one night, everyone watching together."),
         badge: st.live ? "● LIVE NOW" : etDay(e[0]) + " · " + etTime(e[0]), btn: st.live ? "Watch live" : "Tune in", act: 'data-ch="' + id + '"', live: st.live });
-      var nx = evNextNight(c);
-      if (nx && e) { var wd = etDay(nx[0]); out.push({ b: b, img: ytImg(nx[1]), logo: 1, tag: "Coming " + wd + " · Event of the Night", title: evTitle(nx),
-        sub: (evSub(nx) ? evSub(nx) + " · " : "") + wd + " at " + etTime(nx[0]) + " on " + c.name + ".", badge: "Coming " + wd, btn: "See the schedule", act: 'href="#/live/' + id + '"' }); }
+      if (e) evNextNights(c, 2).forEach(function (nx) { var wd = etDay(nx[0]); out.push({ b: b, img: ytImg(nx[1]), logo: 1, tag: "Coming " + wd + " \u00b7 " + etHr(nx[0]), title: evTitle(nx),
+        sub: (evSub(nx) ? evSub(nx) + " \u00b7 " : "") + wd + " at " + etTime(nx[0]) + " on " + c.name + ".", badge: "Coming " + wd, btn: "See the schedule", act: 'href="#/live/' + id + '"', nextNight: 1 }); });
     });
     var nw = newest(40), qn = queue(nw), brs = [];
     nw.slice(0, 12).forEach(function (i) { var n = B[brandOf(i)].name; if (brs.indexOf(n) < 0) brs.push(n); });
