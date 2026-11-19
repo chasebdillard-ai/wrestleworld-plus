@@ -622,8 +622,12 @@
   function ytLoaded() { return !!(window.YT && window.YT.Player && window.YT.loaded); }
   /* One persistent player for the whole session (2026-11-18 v3). iOS Safari only starts playVideo()/loadVideoById() from a tap
      when the YouTube iframe ALREADY exists and is ready, so the iframe is created once at startup (offscreen, never display:none)
-     and a tap only calls loadVideoById()+playVideo() synchronously. The dock is position:fixed and tracks the visible frame
-     placeholder (#frame / #lframe), so the iframe is never moved in the DOM (moving an iframe reloads it).
+     and a tap only calls loadVideoById()+playVideo() synchronously. The iframe is never moved in the DOM (moving an iframe
+     reloads it, which loses the ready player and the one-tap start on WebKit). Instead the dock is position:absolute in
+     DOCUMENT coordinates, laid exactly over the frame placeholder (#frame / #lframe): it scrolls with the page like normal
+     content (no fixed/JS-tracked float on iOS momentum scroll), sits under the sticky header / tabs / bottom nav (z 25), and is
+     only re-measured when the layout changes (ResizeObserver, resize, a slow 500 ms safety tick). No picture-in-picture;
+     fullscreen only via YouTube's own button. (2026-11-18 inline fix; was position:fixed + scroll tracking.)
      iOS starts muted (guaranteed inline autoplay) until sound has been unlocked once by "Tap to unmute".
      TV app (window.TVNative): if a video is still not playing after the muted fallback, a native touch is sent to the
      player (= YouTube's own play button), so nobody has to press it. */
@@ -632,7 +636,7 @@
   window.WW_P = P; // test hook: WW_P.player.getPlayerState()
   P.nativeTap = function () { return nativeTap(); }; P.ctlSync = function () { ctlSync(); };
   var dock = document.createElement("div"); dock.id = "ytdock"; dock.className = "ytdock off";
-  dock.innerHTML = '<iframe id="ytp" title="Video player" aria-hidden="true" tabindex="-1" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen ' +
+  dock.innerHTML = '<iframe id="ytp" title="Video player" aria-hidden="true" tabindex="-1" allow="autoplay; encrypted-media; fullscreen" allowfullscreen ' +
     'src="https://www.youtube.com/embed/?enablejsapi=1&playsinline=1&rel=0&modestbranding=1&autoplay=0&fs=1&origin=' + encodeURIComponent(location.origin) + '"></iframe>';
   document.body.appendChild(dock);
   /* On-air network bug (2026-11-18): translucent logo bottom-right of the player, only while the WWE Network (id wwetv) or
@@ -657,31 +661,28 @@
     var h = P.host;
     if (!h || !document.contains(h)) { if (h) hideDock(); return; }
     var r = h.getBoundingClientRect(), s = dock.style;
-    if (r.width < 4 || r.height < 4) { s.left = "-10000px"; return; }
-    var inSheet = sheet.contains(h), topB = 0, botB = innerHeight;
-    if (!inSheet) {
-      var hd = $("header.top"); if (hd) topB = hd.getBoundingClientRect().bottom;
-      var bn = $(".bnav"); if (bn && bn.offsetWidth) botB = Math.min(botB, bn.getBoundingClientRect().top);
-    }
-    var ct = Math.max(0, topB - r.top), cb = Math.max(0, r.bottom - botB);
-    s.left = r.left + "px"; s.top = r.top + "px"; s.width = r.width + "px"; s.height = r.height + "px";
-    s.zIndex = inSheet ? 85 : 35;
-    s.clipPath = s.webkitClipPath = (ct || cb) ? "inset(" + ct + "px 0 " + cb + "px 0)" : "";
+    if (r.width < 4 || r.height < 4) { if (s.left !== "-10000px") s.left = "-10000px"; return; }
+    var L = Math.round((r.left + window.scrollX) * 100) / 100 + "px", T = Math.round((r.top + window.scrollY) * 100) / 100 + "px";
+    if (s.left !== L) s.left = L; if (s.top !== T) s.top = T;
+    if (s.width !== r.width + "px") s.width = r.width + "px"; if (s.height !== r.height + "px") s.height = r.height + "px";
+    var rad = getComputedStyle(h).borderRadius; if (s.borderRadius !== rad) s.borderRadius = rad;
   }
+  var placeRO = window.ResizeObserver ? new ResizeObserver(function () { if (P.host) place(); }) : null;
   var placeT = null;
   function showDock(el) {
     if (P.host && P.host !== el) P.host.classList.remove("playing");
     P.host = el; el.classList.add("playing"); dock.classList.remove("off"); place();
     bugSync();
-    if (!placeT) placeT = setInterval(place, 250);
+    if (placeRO) { placeRO.disconnect(); placeRO.observe(el); placeRO.observe(document.body); }
+    if (!placeT) placeT = setInterval(place, 500);
   }
   function hideDock() {
     if (P.host) P.host.classList.remove("playing");
-    P.host = null; dock.classList.add("off"); dock.removeAttribute("style"); clearInterval(placeT); placeT = null;
+    P.host = null; dock.classList.add("off"); dock.removeAttribute("style"); clearInterval(placeT); placeT = null; if (placeRO) placeRO.disconnect();
     bugSync();
   }
-  window.addEventListener("scroll", function () { if (P.host) place(); }, { capture: true, passive: true });
   window.addEventListener("resize", function () { if (P.host) place(); });
+  window.addEventListener("orientationchange", function () { if (P.host) setTimeout(place, 300); });
   function stopPlayer() {
     clearInterval(P.tick); P.tick = null; clearTimeout(P.wd); P.want = null;
     try { if (P.player && P.ready) P.player.stopVideo(); } catch (e) {}
@@ -772,7 +773,9 @@
     if (P.mode === "live") { destroyPlayer(); LV.playing = null; }
     P.mode = "vod"; P.i = i; P.q = qk && QUEUES[qk] ? QUEUES[qk] : S[V[i][3]][6];
     if (P.q.indexOf(i) < 0) P.q = [i].concat(P.q);
-    sheet.hidden = false; document.documentElement.style.overflow = "hidden";
+    if (sheet.hidden) { P.pageY = window.scrollY; P.openHash = location.hash; }
+    sheet.hidden = false; document.documentElement.classList.add("wwsheet");  // in-page view: #app hidden, the page scrolls
+    var hdr = $("header.top"); if (IS_TV && hdr) hdr.setAttribute("inert", "");
     if (fresh && location.hash.indexOf("#/watch/") !== 0) history.pushState({ sheet: 1 }, "", location.hash);
     renderSheet(fresh);
   }
@@ -787,15 +790,18 @@
       (names.length ? '<div class="wlinks">' + names.map(function (p) { return '<a href="#/w/' + p[1] + '" data-close>' + esc(p[0][0]) + "</a>"; }).join("") + "</div>" : "") +
       (up.length ? '<div class="upn"><h3>Up next</h3><div class="vl">' + up.map(function (j) { return row(j, null, {}); }).join("") + "</div></div>" : "") + "</div>";
     sheet.querySelectorAll(".upn [data-play]").forEach(function (a) { a.setAttribute("data-inq", "1"); });
-    sheet.scrollTop = 0;
+    window.scrollTo(0, 0);
     function next(force) { if (P.mode === "vod" && P.i === i && (force || autoplayOn()) && P.q[k + 1] != null) { P.i = P.q[k + 1]; renderSheet(); } }
     mkPlayer($("#frame"), v[0], cw && cw.t < v[2] - 30 ? cw.t : 0, function () { cwSave(v[0], v[2], v[2]); next(); }, function () { setTimeout(function () { next(true); }, 1500); });
     if (IS_TV) setTimeout(function () { tvFocus($("[data-pp]", sheet)); }, 30);
     clearInterval(P.tick);
     P.tick = setInterval(function () { try { var p = P.player; if (p && p.getCurrentTime && p.getPlayerState() === 1) cwSave(v[0], p.getCurrentTime(), p.getDuration() || v[2]); } catch (e) {} }, 5000);
   }
-  function closeSheet(fromPop) {
-    if (sheet.hidden) return; destroyPlayer(); P.mode = null; sheet.hidden = true; sheet.innerHTML = ""; document.documentElement.style.overflow = "";
+  function closeSheet(fromPop, nav) {
+    if (sheet.hidden) return; destroyPlayer(); P.mode = null; sheet.hidden = true; sheet.innerHTML = ""; document.documentElement.classList.remove("wwsheet");
+    var hdr = $("header.top"); if (hdr) hdr.removeAttribute("inert");
+    var oh = P.openHash;  // back on the page the player was opened from: restore its scroll position (not when navigating elsewhere)
+    if (!nav && location.hash === oh) { var py = P.pageY || 0; window.scrollTo(0, py); setTimeout(function () { if (sheet.hidden && P.mode !== "vod" && location.hash === oh) window.scrollTo(0, py); }, 30); }
     if (!fromPop && history.state && history.state.sheet) history.back();
     var r = route(); if (r[0] === "" || r[0] === "home") { var row = $("#cwrow"); if (row || Object.keys(cwAll()).length) viewHome(); }
     if (IS_TV && !fromPop) { var op = P.opener; setTimeout(function () { var el = op && document.contains(op) ? op : findKey(P.openerKey, app); tvFocus(el || firstContent()); }, 60); }
@@ -906,8 +912,8 @@
   function tvRefocus() { var c = tvCur(); if (c && document.contains(c)) tvFocus(c); }
   function unhide(el) {  // keep the focused element out from under sticky bars and inside the viewport
     if (!el || !el.getBoundingClientRect) return;
-    var inSheet = sheet.contains(el), sc = inSheet ? sheet : null, top = 0;
-    var bars = inSheet ? (getComputedStyle($(".ptop", sheet) || sheet).position === "sticky" ? [$(".ptop", sheet)] : []) : [$("header.top"), $(".tabs"), $(".yjump")];
+    var inSheet = sheet.contains(el), sc = null, top = 0;  // the player view scrolls the page now (no own scroller)
+    var bars = inSheet ? [$("header.top")] : [$("header.top"), $(".tabs"), $(".yjump")];
     bars.forEach(function (b) { if (b && !b.contains(el) && b.offsetHeight) { var r = b.getBoundingClientRect(); if (r.top <= 2 + top && r.bottom > top) top = r.bottom; } });
     var r = el.getBoundingClientRect(), dy = 0, pad = 14;
     if (r.top < 80 && !sc) return;  // tvnav.js is already scrolling this one to the centre
@@ -991,7 +997,7 @@
     var hh = location.hash || "#/", isBack = NAVSTK.length > 1 && NAVSTK[NAVSTK.length - 2] === hh;
     if (isBack) NAVSTK.pop(); else if (leaving !== hh) NAVSTK.push(hh);
     if (NAVSTK.length > 50) NAVSTK.splice(0, NAVSTK.length - 50);
-    if (!sheet.hidden) closeSheet(true);
+    if (!sheet.hidden) closeSheet(true, true);
     if (P.mode === "live") { destroyPlayer(); P.mode = null; LV.playing = null; }
     clearInterval(LV.timer);
     var r = route();
@@ -1027,7 +1033,7 @@
     if (a.hasAttribute("data-pp")) { e.preventDefault(); if (!togglePlay() && LV.ch && $("#lframe [data-tune]")) { LV.skip = 0; tuneLive(); } return; }
     if (a.hasAttribute("data-ch")) { e.preventDefault(); goLive(a.getAttribute("data-ch")); return; }
     if (a.hasAttribute("data-play")) { e.preventDefault(); var i = +a.getAttribute("data-play"); if (a.hasAttribute("data-inq") && P.mode === "vod") { P.i = i; renderSheet(); } else openPlayer(i, a.getAttribute("data-q")); return; }
-    if (a.hasAttribute("data-close")) { var href = a.getAttribute("href"); e.preventDefault(); if (href && href !== "#") { closeSheet(true); location.hash = href; } else closeSheet(); return; }
+    if (a.hasAttribute("data-close")) { var href = a.getAttribute("href"); e.preventDefault(); if (href && href !== "#") { closeSheet(true, true); location.hash = href; } else closeSheet(); return; }
     e.preventDefault();
     if (a.hasAttribute("data-auto")) { LS.set("ww_auto", !autoplayOn()); a.classList.toggle("on", autoplayOn()); }
     else if (a.hasAttribute("data-kind") || a.hasAttribute("data-sort")) {
