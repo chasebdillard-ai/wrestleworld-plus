@@ -337,8 +337,9 @@
     return '<img class="' + (cls || "") + '" src="https://i.ytimg.com/vi/' + id + '/maxresdefault.jpg" alt="" loading="eager" onerror="this.onerror=null;this.src=\'' + hq + '\'" onload="if(this.naturalWidth&&this.naturalWidth<=120){this.onload=null;this.src=\'' + hq + '\'}">';
   }
   function newest(n) {
-    var l = V.map(function (v, i) { return i; }).filter(function (i) { return V[i][5] && V[i][6] !== "s"; });
-    l.sort(function (a, c) { return V[c][5].localeCompare(V[a][5]) || V[c][2] - V[a][2]; });
+    var ak = function (i) { var a = V[i][7] || "", d = V[i][5] || ""; return a > d ? a : d; };  // v[7] = date added by the gap crawl (2026-11-20)
+    var l = V.map(function (v, i) { return i; }).filter(function (i) { return ak(i) && V[i][6] !== "s"; });
+    l.sort(function (a, c) { return ak(c).localeCompare(ak(a)) || (V[c][7] ? 1 : 0) - (V[a][7] ? 1 : 0) || V[c][2] - V[a][2]; });
     return l.slice(0, n);
   }
   function evNextNights(c, max) {  // upcoming nights after the current/upcoming one: first pick of each later ET day (data-driven from the schedule)
