@@ -384,3 +384,12 @@ html.tv .wlb{display:none}
 .chatf{display:flex;gap:8px}.chatf input{flex:1;min-width:0;height:42px;padding:0 12px;border-radius:10px;background:#0B0B16;border:1px solid var(--line);color:var(--tx);font:16px/1 var(--txt)}
 .chatf .go{height:42px;background:#F2C14E;color:#0B0B16;border:0}
 .lvgrid>div{min-width:0}
+
+/* DONATE (2026-11-19, Cash App $WrestleWorldPlus; button + TV QR modal from donate.js): header pill (subtext only on wide screens), 5th bottom-nav tab on phones */
+.top .hkd-btn.hkd-hdr{min-height:36px;padding:4px 13px}
+.top .hkd-btn.hkd-hdr .hkd-s{display:none}
+@media(min-width:1200px){.top .hkd-btn.hkd-hdr .hkd-s{display:block}}
+@media(max-width:600px){.top .hkd-btn.hkd-hdr{display:none}}
+.bnav a.hkd-bn{background:none;border:0;box-shadow:none;border-radius:0;min-height:0;padding:6px 0;gap:3px;color:var(--tx3)!important;font:600 11px/1.2 inherit;letter-spacing:.01em;flex:1;filter:none}
+.bnav a.hkd-bn .hkd-ic{width:23px;height:23px;border-radius:7px;background:linear-gradient(180deg,#1fdb5f,#00b13a);color:#fff;font-size:15px}
+html.tv .top .hkd-btn.hkd-hdr.tvnav-focus{outline:3px solid #F2C14E!important;outline-offset:2px}
