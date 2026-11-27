@@ -64,7 +64,7 @@
         NORM[i] = " " + norm(v[1] + " " + s[1] + " " + B[s[0]].name + " " + B[s[0]].full + " " + (v[4] || "")) + " ";
       }
       WR.forEach(function (w) { w.push(" " + norm(w[0]) + " "); });
-      CH.forEach(function (c) { if (c.events) return; var acc = 0; c.starts = c.items.map(function (i) { var s = acc; acc += V[i][2]; return s; }); c.total = acc; });
+      CH.forEach(function (c) { if (c.events || c.hls) return; var acc = 0; c.starts = c.items.map(function (i) { var s = acc; acc += V[i][2]; return s; }); c.total = acc; });
     });
   }
 
@@ -101,7 +101,9 @@
     var off = pos - c.starts[lo];
     return { k: lo, i: c.items[lo], off: off, left: V[c.items[lo]][2] - off, began: t - off };
   }
-  function chById(id) { if (id === "wwe-eotn" || id === "tna-eotn") id = "ww-eotn";  // 2026-11-27: the two EOTN channels merged into WrestleWorld+ Event of the Night
+  // 2026-11-27 aliases: the two EOTN channels merged into WrestleWorld+ Event of the Night; WrestleWorld Network / UPN -> WWE Network, Spike TV -> TNA Channel
+  var CH_ALIAS = { "wwe-eotn": "ww-eotn", "tna-eotn": "ww-eotn", network: "wwenet", wwetv: "wwenet", tna: "tnach" };
+  function chById(id) { if (CH_ALIAS[id]) id = CH_ALIAS[id];
     for (var i = 0; i < CH.length; i++) if (CH[i].id === id) return CH[i]; return CH[0]; }
   /* ---------------- Event of the Night: scheduled channels (same schedule + timing as WWE Unlimited / TNA Stream) ---------------- */
   // events: [startUnix (entry 'time' ET, default 8 PM, + part offset), videoId, title, secs, posterTitle, posterSub, promotionBrand]
@@ -138,10 +140,32 @@
       '<div class="chn"><b>' + esc(c.name) + "</b><small>" + (e ? (st.live ? "Now: " : (etDay(e[0]) === "Tonight" ? "Tonight: " : etDay(e[0]) + ": ")) + esc(evTitle(e)) : esc(idle.h)) + '</small></div></div><div class="bar"><i style="width:' + (st.live ? Math.round(st.off / e[3] * 100) : 0) + '%"></i></div><div class="nx">' +
       (st.live ? "<b>On the air</b> · ends " + etTime(e[0] + e[3]) : "<b>" + esc(st.label) + "</b>" + (st.cd ? ' · <span data-evcd="' + e[0] + '">starts in ' + clock(st.cd) + "</span>" : "")) + "</div></a>";
   }
+  /* ---------------- Watch AEW: live HLS channel (2026-11-27) ----------------
+     c.hls = [m3u8] (same WatchAEW FAST feed as Cable ch 106), c.epg = [[start, end, title, sub, desc]] from Cable's build_epg output.
+     When the baked guide runs out, Cable's published epg.json is re-read (max every 30 min); without data the info says "Live 24/7". */
+  var EPGT = 0;
+  function epgAt(c, t) { var l = c.epg || []; for (var i = 0; i < l.length; i++) if (l[i][0] <= t && t < l[i][1]) return i; return -1; }
+  function epgFresh(c) {
+    var now = Date.now() / 1000, l = c.epg || [];
+    if ((l.length && l[l.length - 1][1] > now + 3 * 3600) || Date.now() - EPGT < 30 * 60000) return;
+    EPGT = Date.now();
+    fetch("https://chasebdillard-ai.github.io/cable/epg.json?t=" + Math.floor(Date.now() / 600000)).then(function (r) { return r.json(); }).then(function (j) {
+      var p = j && j.ch && j.ch[c.live || "watchaew"] && j.ch[c.live || "watchaew"].p; if (p && p.length) c.epg = p;
+    }).catch(function () {});
+  }
+  function hlsNowTxt(c) { var k = epgAt(c, Date.now() / 1000); return k >= 0 ? c.epg[k][2] + (c.epg[k][3] ? ": " + c.epg[k][3] : "") : "Live 24/7"; }
+  function hlsCard(c) {
+    epgFresh(c);
+    var now = Date.now() / 1000, k = epgAt(c, now), e = k >= 0 ? c.epg[k] : null, nx = k >= 0 && c.epg[k + 1] ? c.epg[k + 1] : null, b = c.brand;
+    return '<a class="lc hlsch ch-' + c.id + '" href="#/live/' + c.id + '" data-ch="' + c.id + '" style="' + bvars(b) + '"><div class="art" style="background-image:radial-gradient(90% 120% at 90% 0%,' + B[b].b1 + '55,transparent 60%),linear-gradient(135deg,#1a1508,#050505 70%)"><span class="tag"><i class="dot"></i>Live · ' + esc(c.name) + "</span>" + blogo(b, "evlogo") +
+      '<div class="chn"><b>' + esc(c.name) + "</b><small>" + (e ? "Now: " + esc(e[2] + (e[3] ? ": " + e[3] : "")) : "The official AEW channel, live 24/7") + '</small></div></div><div class="bar"><i style="width:' + (e ? Math.round((now - e[0]) / (e[1] - e[0]) * 100) : 100) + '%"></i></div><div class="nx">' +
+      (nx ? "<b>Next " + tod(nx[0]) + "</b> · " + esc(nx[2] + (nx[3] ? ": " + nx[3] : "")) : "<b>Live 24/7</b> · free, official stream from AEW") + "</div></a>";
+  }
   function liveCard(c) {
     if (c.events) return evCard(c);
+    if (c.hls) return hlsCard(c);
     var n = chNow(c), v = V[n.i], nx = V[c.items[(n.k + 1) % c.items.length]];
-    var art = ' style="background-image:' + (c.id === "network" ? "radial-gradient(120% 90% at 0% 0%,#22E4FF55,transparent 55%),radial-gradient(120% 90% at 100% 100%,#FF3D7F55,transparent 55%)," : "") + "url(" + thumb(v[0], 1) + '),linear-gradient(135deg,' + B[brandOf(n.i)].b1 + ',#0B0B16 70%)"';
+    var art = ' style="background-image:' + "url(" + thumb(v[0], 1) + '),linear-gradient(135deg,' + B[brandOf(n.i)].b1 + ',#0B0B16 70%)"';
     return '<a class="lc ch-' + c.id + '" href="#/live/' + c.id + '" data-ch="' + c.id + '"><div class="art"' + art + '><span class="tag"><i class="dot"></i>Live · ' + esc(c.name) + '</span><div class="chn"><b>' + esc(c.name) + "</b><small>Now: " + esc(v[1]) + '</small></div></div><div class="bar"><i style="width:' + Math.round(n.off / v[2] * 100) + '%"></i></div><div class="nx"><b>Next ' + tod(Date.now() / 1000 + n.left) + "</b> · " + esc(nx[1]) + "</div></a>";
   }
 
@@ -384,8 +408,8 @@
       if (!BY_BRAND[f[0]] || !BY_BRAND[f[0]].length) return; var i = brandRecent(f[0]);
       out.push({ b: f[0], img: ytImg(V[i][0]), logo: 1, tag: f[1], title: B[f[0]].full || B[f[0]].name, sub: f[2] + " " + BY_BRAND[f[0]].length.toLocaleString() + " videos.", badge: BY_BRAND[f[0]].length.toLocaleString() + " videos", btn: "Open " + B[f[0]].name + " hub", act: 'href="#/b/' + f[0] + '"', btn2: ["Shuffle", null, 'data-shuffle="' + f[0] + '"'] });
     });
-    var net = chById("network"), n = chNow(net), v = V[n.i];
-    out.push({ b: brandOf(n.i), img: ytImg(v[0]), tag: '<i class="dot"></i>Live 24/7', title: net.name, sub: "Every promotion, around the clock. Now: " + v[1], badge: "On now", btn: "Watch " + net.name, act: 'data-ch="network"', live: 1 });
+    var net = chById("wwenet"), n = chNow(net), v = V[n.i];  // 2026-11-27: WWE Network (was WrestleWorld Network)
+    out.push({ b: "wwe", img: ytImg(v[0]), logo: 1, tag: '<i class="dot"></i>Live 24/7 \u00b7 New channels', title: net.name, sub: "Full WWE matches and events around the clock. Also new: TNA Channel and SuperStation WTBS. Now: " + v[1], badge: "On now", btn: "Watch " + net.name, act: 'data-ch="wwenet"', live: 1, btn2: ["All channels", "#/live/tnach"] });
     return out;
   }
   var CAR = { i: 0, n: 0, t: null, hold: false };
@@ -482,7 +506,7 @@
   function hubHead(b) {
     var x = B[b], l = BY_BRAND[b], ys = l.map(function (i) { return V[i][4]; }).filter(Boolean), mn = Math.min.apply(null, ys), mx = Math.max.apply(null, ys);
     var hrs = Math.round(l.reduce(function (a, i) { return a + V[i][2]; }, 0) / 3600);
-    var ch = x.channel ? '<a class="btn" href="#/live/' + x.channel + '" data-ch="' + x.channel + '">' + ICON.tv + "Watch " + esc(chById(x.channel).name) + "</a>" : "";
+    var ch = x.channel ? '<a class="btn" href="#/live/' + x.channel + '" data-ch="' + x.channel + '">' + ICON.tv + esc(/^Watch /.test(chById(x.channel).name) ? chById(x.channel).name : "Watch " + chById(x.channel).name) + "</a>" : "";
     return '<header class="hh" style="' + bvars(b) + '"><div class="pat" style="background:' + x.pat + '"></div><div class="wrap"><div class="logo">' + blogo(b) + "</div><h1>" + esc(x.full) + '</h1><p class="tl">' + esc(x.tag) + '</p><div class="stats"><div><b>' + l.length.toLocaleString() + "</b>videos</div><div><b>" + hrs.toLocaleString() + "</b>hours</div><div><b>" + (ys.length ? mn + "–" + mx : "—") + "</b>years</div></div>" +
       '<div class="acts">' + ch + '<button class="btn' + (ch ? " gh" : "") + '" data-shuffle="' + b + '">' + ICON.shuffle + "Shuffle " + esc(x.name) + "</button></div></div></header>";
   }
@@ -652,9 +676,10 @@
   dock.innerHTML = '<iframe id="ytp" title="Video player" aria-hidden="true" tabindex="-1" allow="autoplay; encrypted-media; fullscreen" allowfullscreen ' +
     'src="https://www.youtube.com/embed/?enablejsapi=1&playsinline=1&rel=0&modestbranding=1&autoplay=0&fs=1&origin=' + encodeURIComponent(location.origin) + '"></iframe>';
   document.body.appendChild(dock);
-  /* On-air network bug (2026-11-18): translucent logo bottom-right of the player, only while UPN (id wwetv) or
-     Spike TV (id tna) live channels play. Lives inside the dock above the iframe, pointer-events:none so taps / remote pass through. */
-  var BUG = { wwetv: "bug-upn.svg", tna: "bug-spike-tv.svg" };
+  /* On-air channel bug: translucent white logo bottom-right of the player while a 24/7 channel plays (2026-11-27: WWE Network,
+     TNA Channel, SuperStation WTBS; Wikimedia Commons logos made white, assets/bugs/). Lives inside the dock above the iframe,
+     pointer-events:none so taps / remote pass through. Watch AEW (live feed) carries its own on-screen logo, so no bug. */
+  var BUG = { wwenet: "bug-wwe-network.svg", tnach: "bug-tna.svg", wtbs: "bug-wtbs.svg" };
   dock.insertAdjacentHTML("beforeend", '<img class="netbug" alt="" aria-hidden="true" draggable="false" hidden>');
   function bugSync() {
     var im = dock.querySelector(".netbug"); if (!im) return;
@@ -697,6 +722,7 @@
   window.addEventListener("resize", function () { if (P.host) place(); });
   window.addEventListener("orientationchange", function () { if (P.host) setTimeout(place, 300); });
   function stopPlayer() {
+    killHls();
     clearInterval(P.tick); P.tick = null; clearTimeout(P.wd); P.want = null;
     try { if (P.player && P.ready) P.player.stopVideo(); } catch (e) {}
     unmuteBtn(false); hideDock(); ctlSync();
@@ -708,8 +734,8 @@
     else if (!show && b) b.remove();
     ctlSync();
   }
-  function isMuted(p) { try { return !!(p.isMuted && p.isMuted()); } catch (e) { return false; } }
-  function pstate() { try { return P.player && P.ready ? P.player.getPlayerState() : -9; } catch (e) { return -9; } }
+  function isMuted(p) { if (H.on) return HV.muted; try { return !!(p.isMuted && p.isMuted()); } catch (e) { return false; } }
+  function pstate() { if (H.on) return HV.paused ? 2 : (HV.readyState < 3 ? 3 : 1); try { return P.player && P.ready ? P.player.getPlayerState() : -9; } catch (e) { return -9; } }
   function startVid() {
     var p = P.player, w = P.want; if (!p || !w) return;
     plog("create:" + w.id + "@" + w.start);
@@ -744,6 +770,7 @@
     }, 1500);
   }
   function mkPlayer(el, id, start, onEnd, onErr) {
+    killHls();
     P.onEnd = onEnd; P.onErr = onErr; P.fellBack = false; P.tapped = 0;
     var s0 = Math.max(0, Math.floor((typeof start === "function" ? start() : start) || 0));
     P.want = { id: id, start: s0 };
@@ -752,7 +779,74 @@
     else { plog("pending:" + id); yt().then(initPlayer); }
     return Promise.resolve(P.player);
   }
+  /* HLS path (Watch AEW, 2026-11-27): a <video id="hlsv"> in the same dock, over the (hidden, still ready) YouTube iframe.
+     iOS / Safari: native HLS, src + play() synchronously inside the tap (muted until sound was unlocked once, like YouTube).
+     Elsewhere hls.js (same build as Cable, jsDelivr, preloaded when the app starts). Muted fallback + "Tap to unmute" when sound is
+     blocked. Fatal error / no picture: next URL, then the channel's trouble slate with "Try again" (never a YouTube-style skip). */
+  var HV = document.createElement("video"); HV.id = "hlsv"; HV.setAttribute("playsinline", ""); HV.setAttribute("webkit-playsinline", ""); HV.preload = "none";
+  dock.insertBefore(HV, dock.querySelector(".netbug"));
+  var H = { on: false, hls: null, wd: null, c: null, i: 0 };
+  P.H = H; P.HV = HV;  // test hook
+  function hlsLib() {
+    if (window.Hls) return Promise.resolve();
+    return new Promise(function (res, rej) {
+      var s = document.getElementById("hlsjs");
+      if (!s) { s = document.createElement("script"); s.id = "hlsjs"; s.async = true; s.src = "https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"; document.head.appendChild(s); }
+      s.addEventListener("load", function () { res(); }); s.addEventListener("error", function () { rej(); });
+      setTimeout(function () { if (window.Hls) res(); }, 50);
+    });
+  }
+  var NATIVE_HLS = !!HV.canPlayType("application/vnd.apple.mpegurl") && (IS_IOS || /^((?!chrome|chromium|crios|fxios|android|edg).)*safari/i.test(UAS));  // real iOS / Safari only (Chromium with an iPhone UA uses hls.js)
+  function killHls() {
+    clearInterval(H.wd); H.wd = null;
+    if (H.hls) { try { H.hls.destroy(); } catch (e) {} H.hls = null; }
+    if (H.on) { try { HV.onerror = null; HV.pause(); HV.removeAttribute("src"); HV.load(); } catch (e) {} }
+    H.on = false; H.c = null; dock.classList.remove("hlson");
+  }
+  function mkHls(el, c, onErr) {
+    clearInterval(P.tick); clearTimeout(P.wd); P.want = null; try { if (P.player && P.ready) P.player.stopVideo(); } catch (e) {}
+    killHls(); unmuteBtn(false);
+    H.on = true; H.c = c; H.i = 0; P.want = { hls: c.id, id: "hls:" + c.id, start: 0 }; P.fellBack = false;
+    showDock(el); dock.classList.add("hlson");
+    HV.muted = (IS_IOS && !P.soundOK) || !!P.userMuted; try { HV.volume = 1; } catch (e) {}
+    var me = c, med = 0;
+    function go() { var q; try { q = HV.play(); } catch (e) {} if (q && q.catch) q.catch(function () { if (H.c !== me) return; plog("hls-muted"); HV.muted = true; P.fellBack = true; unmuteBtn(true); HV.play().catch(function () {}); }); }
+    function fail(why) {
+      if (H.c !== me) return; plog("hls-fail:" + why); if (H.hls) { try { H.hls.destroy(); } catch (e) {} H.hls = null; }
+      H.i++; if (H.i < me.hls.length) return start();
+      killHls(); hideDock(); P.want = null; unmuteBtn(false); ctlSync(); if (onErr) onErr(why);
+    }
+    function start() {
+      var u = me.hls[H.i]; plog("hls:" + me.id + ":" + H.i);
+      if (NATIVE_HLS) { HV.onerror = function () { fail("media"); }; HV.src = u; go(); return; }  // inside the tap on iOS / Safari
+      hlsLib().then(function () {
+        if (H.c !== me) return;
+        if (!window.Hls || !Hls.isSupported()) { if (HV.canPlayType("application/vnd.apple.mpegurl")) { HV.onerror = function () { fail("media"); }; HV.src = u; go(); } else fail("unsupported"); return; }
+        var h = H.hls = new Hls({ liveSyncDurationCount: 3, manifestLoadingMaxRetry: 2, levelLoadingMaxRetry: 3, fragLoadingMaxRetry: 3 });
+        h.on(Hls.Events.ERROR, function (e, d) { if (!d.fatal || H.hls !== h) return; if (d.type === Hls.ErrorTypes.MEDIA_ERROR && !med) { med = 1; try { h.recoverMediaError(); } catch (x) { fail("media"); } return; } fail(d.type || "fatal"); });
+        h.on(Hls.Events.MANIFEST_PARSED, go);
+        h.loadSource(u); h.attachMedia(HV);
+      }, function () { fail("hlsjs"); });
+    }
+    var last = -1, still = 0, ok = false, t = 0;
+    H.wd = setInterval(function () {
+      if (H.c !== me) return; t++;
+      if (HV.currentTime !== last && HV.currentTime > 0) { last = HV.currentTime; still = 0; if (!ok) { ok = true; plog("hls-playing"); } unmuteBtn(HV.muted); ctlSync(); return; }
+      if (HV.paused && !ok && t === 4) { plog("hls-fallback-muted"); HV.muted = true; P.fellBack = true; unmuteBtn(true); HV.play().catch(function () {}); }
+      if (!HV.paused || !ok) still++;
+      if ((!ok && still >= 25) || (ok && !HV.paused && still >= 20)) fail(ok ? "stall" : "timeout");
+    }, 1000);
+    start();
+  }
+  function hlsUnmute() {
+    P.userMuted = false; HV.muted = false; try { HV.volume = 1; } catch (e) {}
+    var q = HV.play(); if (q && q.catch) q.catch(function () { HV.muted = true; unmuteBtn(true); HV.play().catch(function () {}); });
+    P.fellBack = false; unmuteBtn(false);
+    setTimeout(function () { if (!H.on) return; if (!HV.paused && !HV.muted) { P.soundOK = true; plog("sound-on"); } else if (HV.paused) { plog("unmute-blocked"); HV.muted = true; unmuteBtn(true); HV.play().catch(function () {}); } ctlSync(); }, 900);
+  }
+  if (!NATIVE_HLS) setTimeout(function () { if (typeof CH !== "undefined" && CH && CH.some(function (c) { return c.hls; })) hlsLib().catch(function () {}); }, 2500);  // preload hls.js so a tap starts at once
   function unmute() {
+    if (H.on) return hlsUnmute();
     var p = P.player; if (!p) return;
     P.userMuted = false;
     try { p.unMute(); p.setVolume(100); if (p.getPlayerState() !== 1) p.playVideo(); } catch (e) {}
@@ -765,6 +859,7 @@
     }, 900);
   }
   function togglePlay() {
+    if (H.on) { if (HV.paused) { var q = HV.play(); if (q && q.catch) q.catch(function () { HV.muted = true; unmuteBtn(true); HV.play().catch(function () {}); }); } else HV.pause(); setTimeout(ctlSync, 300); return true; }
     var p = P.player; if (!p || !P.want) return false;
     var st = pstate();
     try { if (st === 1 || st === 3) p.pauseVideo(); else p.playVideo(); } catch (e) {}
@@ -823,7 +918,8 @@
   /* ---------------- live channel view ---------------- */
   var LV = { ch: null, timer: null, playing: null, clockI: null, skip: 0 };
   function viewLive(id) {
-    var c = chById(id || LS.get("ww_ch", "network")); LS.set("ww_ch", c.id); LV.ch = c;
+    var c = chById(id || LS.get("ww_ch", "wwenet")); LS.set("ww_ch", c.id); LV.ch = c;
+    if (id && id !== c.id && location.hash.indexOf("#/live/") === 0) history.replaceState(history.state, "", "#/live/" + c.id);  // old channel link -> its new channel
     setTitle(c.name); nav("live");
     app.innerHTML = '<div class="wrap"><div class="lv-h"><span class="kick">● Live 24/7</span></div><div class="rail chips chsw">' + CH.map(function (x) { return '<a class="chip' + (x.id === c.id ? " on" : "") + '" href="#/live/' + x.id + '" data-ch="' + x.id + '">' + esc(x.name) + "</a>"; }).join("") + '</div>' +
       '<div class="lvgrid" style="margin-top:14px"><div><div class="frame" id="lframe" style="border-radius:16px;overflow:hidden"><div class="tune"><button data-tune>' + "<span>" + ICON.play + "</span>Tune in to " + esc(c.name) + '</button></div></div><div class="lvctl">' + ctlHtml() + '</div><div class="lv-now" id="lnow"></div></div><div><div class="guide" id="lguide"></div>' + chatHtml(c) + '</div></div><p style="color:var(--tx3);font-size:12.5px;margin-top:16px">' + esc(c.desc) + " Schedule is computed from the clock, so it is the same on every device.</p>" + foot() + "</div>";
@@ -858,6 +954,7 @@
   function liveInfo() {
     var c = LV.ch; if (!c || !$("#lnow")) { clearInterval(LV.timer); return; }
     if (c.events) return evInfo(c);
+    if (c.hls) return hlsInfo(c);
     var n = chNow(c), v = V[n.i], b = brandOf(n.i), now = Date.now() / 1000;
     $("#lnow").innerHTML = '<span class="kick" style="color:var(--c3)">Now playing</span><h2>' + esc(v[1]) + '</h2><div class="meta">' + blogo(b).replace("<img", '<img style="height:18px;width:auto;max-width:70px;object-fit:contain"') + "<span>" + esc(S[v[3]][1]) + "</span><span>· " + esc(fdate(v)) + "</span>" + kb(v[6]) + '</div><div class="lv-prog"><i style="width:' + (n.off / v[2] * 100).toFixed(1) + '%"></i></div><div class="lv-times"><span>' + tod(n.began) + " · " + clock(n.off) + " in</span><span>" + clock(n.left) + " left · ends " + tod(now + n.left) + "</span></div>";
     var g = '<ul><li><b>Now</b><span>' + esc(v[1]) + "</span></li>", t = now + n.left;
@@ -866,8 +963,30 @@
     // the clock moved on to a new item: follow it (unless we already rolled into it when the last video ended)
     if (P.mode === "live" && LV.playing != null && n.i !== LV.clockI) { if (n.i === LV.playing) LV.clockI = n.i; else tuneLive(); }
   }
+  function hlsInfo(c) {
+    epgFresh(c);
+    var now = Date.now() / 1000, k = epgAt(c, now), e = k >= 0 ? c.epg[k] : null;
+    $("#lnow").innerHTML = '<span class="kick" style="color:var(--c3)">\u25cf Live \u00b7 ' + esc(c.name) + "</span><h2>" + esc(e ? e[2] + (e[3] ? ": " + e[3] : "") : c.name + " \u00b7 Live 24/7") + '</h2><div class="meta">' + blogo(c.brand).replace("<img", '<img style="height:22px;width:auto;max-width:80px;object-fit:contain"') + "<span>" + (e ? esc(tod(e[0]) + " \u2013 " + tod(e[1])) : "Official free AEW channel") + "</span></div>" +
+      (e && e[4] ? '<p class="lv-desc" style="color:var(--tx2);font-size:13.5px;margin:8px 0 0">' + esc(e[4]) + "</p>" : "") +
+      (e ? '<div class="lv-prog"><i style="width:' + ((now - e[0]) / (e[1] - e[0]) * 100).toFixed(1) + '%"></i></div><div class="lv-times"><span>' + tod(e[0]) + " \u00b7 " + clock(now - e[0]) + " in</span><span>" + clock(e[1] - now) + " left \u00b7 ends " + tod(e[1]) + "</span></div>" : "");
+    var g = "<ul>";
+    if (e) g += "<li><b>Now</b><span>" + esc(e[2] + (e[3] ? ": " + e[3] : "")) + "</span></li>";
+    (c.epg || []).filter(function (x) { return x[0] > now; }).slice(0, 10).forEach(function (x) { g += "<li><b>" + tod(x[0]) + "</b><span>" + esc(x[2] + (x[3] ? ": " + x[3] : "")) + "</span></li>"; });
+    if (!e && !(c.epg || []).some(function (x) { return x[0] > now; })) g += "<li><b>Live</b><span>" + esc(c.name) + " \u00b7 live 24/7, the official free AEW channel</span></li>";
+    $("#lguide").innerHTML = g + "</ul>";
+  }
+  function tuneHlsCh() {  // Watch AEW: start the live HLS feed (inside the tap); on failure the trouble slate with Try again
+    var c = LV.ch, fr = $("#lframe"); if (!c || !fr) return;
+    P.mode = "live"; LV.playing = "hls:" + c.id;
+    mkHls(fr, c, function () {
+      P.mode = null; LV.playing = null;
+      fr.innerHTML = '<div class="tune evtune evslate" style="' + bvars(c.brand) + '"><div class="evsl">' + blogo(c.brand, "evlogo") + '<p class="k">Live</p><h3>We\'re having trouble with ' + esc(c.name) + '.</h3><p class="when">The live feed isn\u2019t responding right now.</p><button class="btn" data-tune style="margin:10px auto 0">Try again</button></div></div>';
+      ctlSync(); if (IS_TV) tvFocus(fr.querySelector("[data-tune]"));
+    });
+  }
   function tuneLive(advance) {
     if (LV.ch && LV.ch.events) return tuneEvent();
+    if (LV.ch && LV.ch.hls) return tuneHlsCh();
     var c = LV.ch, n = chNow(c), i = n.i, off = n.off, fr = $("#lframe"); if (!c || !fr) return;
     var kk = n.k;
     if (advance && i === LV.playing) { kk = n.k + 1; i = c.items[kk % c.items.length]; off = 0; }  // ended (or failed) a moment before the clock: roll on now
