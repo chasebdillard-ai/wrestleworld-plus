@@ -882,8 +882,8 @@
     if (!e) { evFrame(); return; }
     fr.removeAttribute("data-k");
     P.mode = "live"; LV.playing = e[1]; LV.evId = e[0] + e[1];
-    mkPlayer(fr, e[1], function () { return Date.now() / 1000 - e[0]; },
-      function () { setTimeout(function () { if (P.mode === "live") { destroyPlayer(); P.mode = null; LV.playing = null; LV.evId = null; liveInfo(); if (evNow(c)) tuneEvent(); } }, 300); },
+    mkPlayer(fr, e[1], function () { return e[7] ? 0 : Date.now() / 1000 - e[0]; },  // e[7]: live stream, join at the live edge
+      function () { setTimeout(function () { if (P.mode === "live") { destroyPlayer(); P.mode = null; LV.playing = null; LV.evId = null; liveInfo(); if (evNow(c) && !e[7]) tuneEvent(); else if (e[7]) evFrame(); } }, 300); },
       function () { destroyPlayer(); P.mode = null; LV.playing = null; LV.evId = null; fr.setAttribute("data-k", "live"); fr.innerHTML = '<div class="tune evtune evslate" style="' + bvars(c.brand) + '"><div class="evsl">' + blogo(c.brand, "evlogo") + '<p class="k">Event of the Night</p><h3>We\'re having trouble with tonight\'s broadcast.</h3><p class="when">Stay tuned to ' + esc(c.site) + '</p><button class="btn" data-tune style="margin:10px auto 0">Try again</button></div></div>'; if (IS_TV) tvFocus(fr.querySelector("[data-tune]")); });
   }
   function goLive(id) {  // tap on a channel card / chip: render the channel and start it inside the same gesture
