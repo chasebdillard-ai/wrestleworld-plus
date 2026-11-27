@@ -393,3 +393,13 @@ html.tv .wlb{display:none}
 .bnav a.hkd-bn{background:none;border:0;box-shadow:none;border-radius:0;min-height:0;padding:6px 0;gap:3px;color:var(--tx3)!important;font:600 11px/1.2 inherit;letter-spacing:.01em;flex:1;filter:none}
 .bnav a.hkd-bn .hkd-ic{width:23px;height:23px;border-radius:7px;background:linear-gradient(180deg,#1fdb5f,#00b13a);color:#fff;font-size:15px}
 html.tv .top .hkd-btn.hkd-hdr.tvnav-focus{outline:3px solid #F2C14E!important;outline-offset:2px}
+/* WrestleWorld+ Event of the Night (2026-11-27): one channel, WrestleWorld+ title-plate + EVENT OF THE NIGHT strap logo (eotn-logo.svg, ~3.6:1) */
+.lc .evlogo[src^="eotn-logo"]{height:40px;max-width:150px}
+.evsl .evlogo[src^="eotn-logo"]{height:clamp(54px,9vw,96px);max-width:90%}
+.slogo[src^="eotn-logo"]{height:clamp(52px,7vw,92px)!important;max-width:min(340px,80%)!important;width:auto}
+.guide .evpast{border-top:1px solid var(--line)}
+.guide .evpast li:first-child{background:#ffffff08}
+.guide .evpast li.h b{width:auto;color:var(--tx3);font:800 10.5px/1.4 var(--disp);letter-spacing:.12em;text-transform:uppercase}
+.guide .evpast li b{width:84px}
+.guide .evpast li span{color:var(--tx2)}
+@media(max-width:600px){.evsl{padding:8px 12px}.evsl .evlogo[src^="eotn-logo"]{height:34px;margin-bottom:4px}.evsl h3{font-size:15px;margin-bottom:2px}.evsl p:not(.when):not(.cd):not(.k){display:none}.evsl .cd{font-size:17px}}

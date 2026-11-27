@@ -101,9 +101,10 @@
     var off = pos - c.starts[lo];
     return { k: lo, i: c.items[lo], off: off, left: V[c.items[lo]][2] - off, began: t - off };
   }
-  function chById(id) { for (var i = 0; i < CH.length; i++) if (CH[i].id === id) return CH[i]; return CH[0]; }
+  function chById(id) { if (id === "wwe-eotn" || id === "tna-eotn") id = "ww-eotn";  // 2026-11-27: the two EOTN channels merged into WrestleWorld+ Event of the Night
+    for (var i = 0; i < CH.length; i++) if (CH[i].id === id) return CH[i]; return CH[0]; }
   /* ---------------- Event of the Night: scheduled channels (same schedule + timing as WWE Unlimited / TNA Stream) ---------------- */
-  // events: [startUnix (8 PM ET + part offset), videoId, title, secs, posterTitle, posterSub]
+  // events: [startUnix (entry 'time' ET, default 8 PM, + part offset), videoId, title, secs, posterTitle, posterSub, promotionBrand]
   function evNow(c, t) { t = t == null ? Date.now() / 1000 : t; for (var i = 0; i < c.events.length; i++) { var e = c.events[i]; if (e[0] <= t && t < e[0] + e[3]) return e; } return null; }
   function evNext(c, t) { t = t == null ? Date.now() / 1000 : t; for (var i = 0; i < c.events.length; i++) if (c.events[i][0] > t) return c.events[i]; return null; }
   function etDk(x) { return new Date(x * 1000).toLocaleDateString("en-US", { timeZone: "America/New_York" }); }
@@ -113,19 +114,28 @@
     try { if (etDk(x) === etDk(n)) return "Tonight"; if (etDk(x) === etDk(n + 86400)) return "Tomorrow";
       return new Date(x * 1000).toLocaleDateString("en-US", { weekday: "long", timeZone: "America/New_York" }); } catch (e) { return ""; }
   }
+  function evPromo(e) { return e && e[6] && B[e[6]] ? e[6] : null; }  // promotion of a pick (WWE / TNA ...), from the schedule's "brand"
+  function evKick(e) { var p = evPromo(e); return "Event of the Night" + (p ? " \u00b7 " + B[p].name : ""); }
+  function evIdle(c) {  // no pick on the air and none scheduled: "That's a wrap" after tonight's pick ended, else "No event tonight"
+    var now = Date.now() / 1000, wrap = c.events.some(function (x) { return x[0] + x[3] <= now && etDk(x[0]) === etDk(now - 6 * 3600) && now - x[0] < 86400; });
+    return wrap ? { h: "That\u2019s a wrap for tonight", p: "The next Event of the Night will be announced soon" }
+                : { h: "No event tonight", p: "Event of the Night usually airs at 8:00 PM ET \u00b7 next pick coming soon" };
+  }
+  function evMetaLogo(c, e) { var p = evPromo(e); return p ? blogo(p).replace("<img", '<img style="height:18px;width:auto;max-width:70px;object-fit:contain"') : blogo(c.brand).replace("<img", '<img style="height:26px;width:auto;max-width:110px;object-fit:contain"'); }
   function evTitle(e) { return e[4] || String(e[2]).replace(/\s+\u00b7\s+Part\s.*$/, ""); }
   function evSub(e) { return e[4] && !e[5] ? e[2] : e[5]; }
   function evPoster(e) { return "https://i.ytimg.com/vi/" + e[1] + "/hqdefault.jpg"; }
   function evState(c) {  // {live, ev, next, label, cd}
     var t = Date.now() / 1000, ev = evNow(c, t), nx = evNext(c, t);
     if (ev) return { live: true, ev: ev, next: nx, off: t - ev[0], left: ev[0] + ev[3] - t };
-    return { live: false, ev: nx, next: nx, cd: nx ? nx[0] - t : 0, label: nx ? "Coming " + etDay(nx[0]).replace("Tonight", "tonight").replace("Tomorrow", "tomorrow") + " at " + etTime(nx[0]) : "Next event of the night coming soon" };
+    return { live: false, ev: nx, next: nx, cd: nx ? nx[0] - t : 0, label: nx ? "Coming " + etDay(nx[0]).replace("Tonight", "tonight").replace("Tomorrow", "tomorrow") + " at " + etTime(nx[0]) : "Next Event of the Night coming soon" };
   }
   function evCard(c) {
     var st = evState(c), e = st.ev, b = c.brand, x = B[b];
     var art = ' style="' + bvars(b) + ';background-image:' + (e ? "url(" + evPoster(e) + ")," : "") + "linear-gradient(135deg," + x.b1 + ',#0B0B16 70%)"';
-    return '<a class="lc eotn ch-' + c.id + '" href="#/live/' + c.id + '" data-ch="' + c.id + '" style="' + bvars(b) + '"><div class="art"' + art + '><span class="tag">' + (st.live ? '<i class="dot"></i>Live · ' : "") + "Event of the Night</span>" + blogo(b, "evlogo") +
-      '<div class="chn"><b>' + esc(c.name) + "</b><small>" + (e ? (st.live ? "Now: " : (etDay(e[0]) === "Tonight" ? "Tonight: " : etDay(e[0]) + ": ")) + esc(evTitle(e)) : "Stay tuned to " + esc(c.site)) + '</small></div></div><div class="bar"><i style="width:' + (st.live ? Math.round(st.off / e[3] * 100) : 0) + '%"></i></div><div class="nx">' +
+    var idle = e ? null : evIdle(c);
+    return '<a class="lc eotn ch-' + c.id + '" href="#/live/' + c.id + '" data-ch="' + c.id + '" style="' + bvars(b) + '"><div class="art"' + art + '><span class="tag">' + (st.live ? '<i class="dot"></i>Live · ' : "") + esc(evKick(e)) + "</span>" + blogo(b, "evlogo") +
+      '<div class="chn"><b>' + esc(c.name) + "</b><small>" + (e ? (st.live ? "Now: " : (etDay(e[0]) === "Tonight" ? "Tonight: " : etDay(e[0]) + ": ")) + esc(evTitle(e)) : esc(idle.h)) + '</small></div></div><div class="bar"><i style="width:' + (st.live ? Math.round(st.off / e[3] * 100) : 0) + '%"></i></div><div class="nx">' +
       (st.live ? "<b>On the air</b> · ends " + etTime(e[0] + e[3]) : "<b>" + esc(st.label) + "</b>" + (st.cd ? ' · <span data-evcd="' + e[0] + '">starts in ' + clock(st.cd) + "</span>" : "")) + "</div></a>";
   }
   function liveCard(c) {
@@ -356,13 +366,13 @@
   function brandRecent(b) { var l = BY_BRAND[b].filter(function (i) { return V[i][5] && V[i][2] >= 900; }); l.sort(function (a, c) { return V[c][5].localeCompare(V[a][5]); }); return l[0] != null ? l[0] : BY_BRAND[b][0]; }
   function carSlides() {
     var out = [];
-    ["wwe-eotn", "tna-eotn"].forEach(function (id) {
+    ["ww-eotn"].forEach(function (id) {
       var c = null; CH.forEach(function (x) { if (x.id === id) c = x; }); if (!c || !c.events) return;
       var st = evState(c), e = st.ev, b = c.brand;
-      if (e) out.push({ b: b, img: ytImg(e[1]), logo: 1, tag: (st.live ? '<i class="dot"></i>Live now · ' : "") + "Event of the Night",
+      if (e) out.push({ b: b, img: ytImg(e[1]), logo: 1, tag: (st.live ? '<i class="dot"></i>Live now · ' : "") + esc(evKick(e)),
         title: evTitle(e), sub: (evSub(e) ? evSub(e) + " · " : "") + (st.live ? "On the air now on " + c.name + ". Jump in where everyone else is." : etDay(e[0]) + " at " + etTime(e[0]) + " on " + c.name + ". One event, one night, everyone watching together."),
         badge: st.live ? "● LIVE NOW" : etDay(e[0]) + " · " + etTime(e[0]), btn: st.live ? "Watch live" : "Tune in", act: 'data-ch="' + id + '"', live: st.live });
-      if (e) evNextNights(c, 2).forEach(function (nx) { var wd = etDay(nx[0]); out.push({ b: b, img: ytImg(nx[1]), logo: 1, tag: "Coming " + wd + " \u00b7 " + etHr(nx[0]), title: evTitle(nx),
+      if (e) evNextNights(c, 2).forEach(function (nx) { var wd = etDay(nx[0]); out.push({ b: b, img: ytImg(nx[1]), logo: 1, tag: "Coming " + wd + " \u00b7 " + etHr(nx[0]) + (evPromo(nx) ? " \u00b7 " + B[evPromo(nx)].name : ""), title: evTitle(nx),
         sub: (evSub(nx) ? evSub(nx) + " \u00b7 " : "") + wd + " at " + etTime(nx[0]) + " on " + c.name + ".", badge: "Coming " + wd, btn: "See the schedule", act: 'href="#/live/' + id + '"', nextNight: 1 }); });
     });
     var nw = newest(40), qn = queue(nw), brs = [];
@@ -431,7 +441,7 @@
     setTitle(""); nav("home");
     var rnd = seed(dayseed()), h = "";
     var total = V.length, hrs = Math.round(V.reduce(function (a, v) { return a + v[2]; }, 0) / 3600);
-    h += '<div class="wrap">' + carHtml() + '<section class="hero"><div class="glow"></div><img class="hlogo" src="logo.svg" alt="WrestleWorld+" width="895" height="180"><span class="kick">12 promotions · one place</span><h1>Every promotion.<br><span>Every era.</span></h1><p>Free, official full matches, shows and pay-per-views from WWE to NJPW — organized by name and year, searchable by wrestler, with 24/7 channels plus a WWE and a TNA Event of the Night every night at 8 PM ET.</p>' +
+    h += '<div class="wrap">' + carHtml() + '<section class="hero"><div class="glow"></div><img class="hlogo" src="logo.svg" alt="WrestleWorld+" width="895" height="180"><span class="kick">12 promotions · one place</span><h1>Every promotion.<br><span>Every era.</span></h1><p>Free, official full matches, shows and pay-per-views from WWE to NJPW — organized by name and year, searchable by wrestler, with 24/7 channels plus the WrestleWorld+ Event of the Night, one hand-picked full event every night.</p>' +
       '<div class="stats"><div><b>' + total.toLocaleString() + "</b>videos</div><div><b>" + hrs.toLocaleString() + "</b>hours</div><div><b>" + WR.length.toLocaleString() + "</b>wrestlers indexed</div></div></section>";
     h += '<section class="sec"><div class="sh"><div><h2>Live now</h2><p>24/7 channels — everyone sees the same thing at the same time.</p></div><a class="more" href="#/live">Guide</a></div><div class="rail" id="liverail">' + CH.map(liveCard).join("") + "</div></section>";
     var cw = cwAll(), ids = Object.keys(cw).filter(function (id) { return IDX[id] != null; }).sort(function (a, b) { return cw[b].at - cw[a].at; }).slice(0, 15).map(function (id) { return IDX[id]; });
@@ -827,17 +837,20 @@
     fr.setAttribute("data-k", k); setTimeout(ctlSync, 0);
     var bg = '<div class="evbg" style="background-image:' + (e ? "url(" + evPoster(e) + ")," : "") + "linear-gradient(135deg," + B[b].b1 + ',#0B0B16 70%)"></div>';
     if (st.live) fr.innerHTML = '<div class="tune evtune" style="' + bvars(b) + '">' + bg + '<button data-tune><span>' + ICON.play + "</span>Watch " + esc(c.name) + "<small>" + esc(evTitle(e)) + " · Live now</small></button></div>";
-    else fr.innerHTML = '<div class="tune evtune evslate" style="' + bvars(b) + '">' + bg + '<div class="evsl">' + blogo(b, "evlogo") + '<p class="k">Event of the Night</p>' +
+    else fr.innerHTML = '<div class="tune evtune evslate" style="' + bvars(b) + '">' + bg + '<div class="evsl">' + blogo(b, "evlogo") + '<p class="k">' + (e ? esc(etDay(e[0]) + (evPromo(e) ? " \u00b7 " + B[evPromo(e)].name : "")) : "Event of the Night") + "</p>" +
       (e ? "<h3>" + esc(evTitle(e)) + "</h3>" + (evSub(e) ? "<p>" + esc(evSub(e)) + "</p>" : "") + '<p class="when">' + esc(st.label) + '</p><p class="cd" data-evcd="' + e[0] + '">Starts in ' + clock(st.cd) + "</p>"
-         : "<h3>Stay tuned to " + esc(c.site) + '</h3><p class="when">Every night at 8:00 PM ET</p>') + "</div></div>";
+         : (function (x) { return "<h3>" + esc(x.h) + '</h3><p class="when">' + esc(x.p) + "</p>"; })(evIdle(c))) + "</div></div>";
   }
   function evInfo(c) {
     var st = evState(c), e = st.ev, now = Date.now() / 1000;
-    if (st.live) $("#lnow").innerHTML = '<span class="kick" style="color:var(--c3)">● On the air · Event of the Night</span><h2>' + esc(e[2]) + '</h2><div class="meta">' + blogo(c.brand).replace("<img", '<img style="height:18px;width:auto;max-width:70px;object-fit:contain"') + "<span>Started " + etTime(e[0]) + '</span></div><div class="lv-prog"><i style="width:' + (st.off / e[3] * 100).toFixed(1) + '%"></i></div><div class="lv-times"><span>' + clock(st.off) + " in</span><span>" + clock(st.left) + " left · ends " + etTime(e[0] + e[3]) + "</span></div>";
-    else $("#lnow").innerHTML = '<span class="kick" style="color:var(--c3)">Event of the Night</span><h2>' + (e ? esc(evTitle(e)) : "Stay tuned to " + esc(c.site)) + '</h2><div class="meta">' + blogo(c.brand).replace("<img", '<img style="height:18px;width:auto;max-width:70px;object-fit:contain"') + "<span>" + (e ? esc(st.label) + " · starts in " + clock(st.cd) : "Every night at 8:00 PM ET") + "</span></div>";
+    if (st.live) $("#lnow").innerHTML = '<span class="kick" style="color:var(--c3)">● On the air · ' + esc(evKick(e)) + '</span><h2>' + esc(e[2]) + '</h2><div class="meta">' + evMetaLogo(c, e) + "<span>Started " + etTime(e[0]) + '</span></div><div class="lv-prog"><i style="width:' + (st.off / e[3] * 100).toFixed(1) + '%"></i></div><div class="lv-times"><span>' + clock(st.off) + " in</span><span>" + clock(st.left) + " left · ends " + etTime(e[0] + e[3]) + "</span></div>";
+    else { var idl = e ? null : evIdle(c); $("#lnow").innerHTML = '<span class="kick" style="color:var(--c3)">' + esc(evKick(e)) + '</span><h2>' + (e ? esc(evTitle(e)) : esc(idl.h)) + '</h2><div class="meta">' + evMetaLogo(c, e) + "<span>" + (e ? esc(st.label) + " · starts in " + clock(st.cd) : esc(idl.p)) + "</span></div>"; }
     var g = "<ul>", up = c.events.filter(function (x) { return x[0] + x[3] > now; }).slice(0, 8);
     up.forEach(function (x) { g += "<li><b>" + (x === st.ev && st.live ? "Now" : etDay(x[0]) + " " + etTime(x[0])) + "</b><span>" + esc(x[2]) + "</span></li>"; });
-    $("#lguide").innerHTML = (up.length ? g : g + "<li><b>8:00 PM ET</b><span>Next event of the night coming soon</span></li>") + "</ul>";
+    var pk = {}, past = c.events.filter(function (x) { return x[0] + x[3] <= now; }).filter(function (x) {  // one line per pick: part 2s of a double feature folded into part 1
+      var k = etDk(x[0]) + "|" + (x[6] || ""); if (pk[k]) return false; pk[k] = 1; return true; }).slice(-4).reverse();  // recently aired (history incl. the WWE/TNA picks before the merge)
+    $("#lguide").innerHTML = (up.length ? g : g + "<li><b>Soon</b><span>Next Event of the Night coming soon</span></li>") + "</ul>" +
+      (past.length ? '<ul class="evpast"><li class="h"><b>Recently aired</b></li>' + past.map(function (x) { return "<li><b>" + new Date(x[0] * 1000).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "America/New_York" }) + "</b><span>" + (evPromo(x) ? esc(B[evPromo(x)].name) + " \u00b7 " : "") + esc(String(x[2]).replace(/\s+\u00b7\s+Part\s.*$/, "")) + "</span></li>"; }).join("") + "</ul>" : "");
     // follow the schedule: an event started or ended while watching / waiting
     if (P.mode === "live") { var nowId = st.live ? e[0] + e[1] : null; if (nowId !== LV.evId) { if (nowId) tuneLive(); else { destroyPlayer(); P.mode = null; LV.playing = null; LV.evId = null; evFrame(); } } }
     else evFrame();
