@@ -396,7 +396,7 @@
       if (e) out.push({ b: b, img: ytImg(e[1]), logo: 1, tag: (st.live ? '<i class="dot"></i>Live now · ' : "") + esc(evKick(e)),
         title: evTitle(e), sub: (evSub(e) ? evSub(e) + " · " : "") + (st.live ? "On the air now on " + c.name + ". Jump in where everyone else is." : etDay(e[0]) + " at " + etTime(e[0]) + " on " + c.name + ". One event, one night, everyone watching together."),
         badge: st.live ? "● LIVE NOW" : etDay(e[0]) + " · " + etTime(e[0]), btn: st.live ? "Watch live" : "Tune in", act: 'data-ch="' + id + '"', live: st.live });
-      if (e) evNextNights(c, 2).forEach(function (nx) { var wd = etDay(nx[0]); out.push({ b: b, img: ytImg(nx[1]), logo: 1, tag: "Coming " + wd + " \u00b7 " + etHr(nx[0]) + (evPromo(nx) ? " \u00b7 " + B[evPromo(nx)].name : ""), title: evTitle(nx),
+      if (e) evNextNights(c, 6).forEach(function (nx) { var wd = etDay(nx[0]); out.push({ b: b, img: ytImg(nx[1]), logo: 1, tag: "Coming " + wd + " \u00b7 " + etHr(nx[0]) + (evPromo(nx) ? " \u00b7 " + B[evPromo(nx)].name : ""), title: evTitle(nx),
         sub: (evSub(nx) ? evSub(nx) + " \u00b7 " : "") + wd + " at " + etTime(nx[0]) + " on " + c.name + ".", badge: "Coming " + wd, btn: "See the schedule", act: 'href="#/live/' + id + '"', nextNight: 1 }); });
     });
     var nw = newest(40), qn = queue(nw), brs = [];
