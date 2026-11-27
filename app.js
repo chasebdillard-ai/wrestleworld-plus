@@ -441,7 +441,7 @@
     setTitle(""); nav("home");
     var rnd = seed(dayseed()), h = "";
     var total = V.length, hrs = Math.round(V.reduce(function (a, v) { return a + v[2]; }, 0) / 3600);
-    h += '<div class="wrap">' + carHtml() + '<section class="hero"><div class="glow"></div><img class="hlogo" src="logo.svg" alt="WrestleWorld+" width="895" height="180"><span class="kick">12 promotions · one place</span><h1>Every promotion.<br><span>Every era.</span></h1><p>Free, official full matches, shows and pay-per-views from WWE to NJPW — organized by name and year, searchable by wrestler, with 24/7 channels plus the WrestleWorld+ Event of the Night, one hand-picked full event every night.</p>' +
+    h += '<div class="wrap">' + carHtml() + '<section class="hero"><div class="glow"></div><img class="hlogo" src="logo.svg" alt="WrestleWorld+" width="895" height="180"><span class="kick">' + ORDER.length + ' promotions · one place</span><h1>Every promotion.<br><span>Every era.</span></h1><p>Free, official full matches, shows and pay-per-views from WWE to NJPW — organized by name and year, searchable by wrestler, with 24/7 channels plus the WrestleWorld+ Event of the Night, one hand-picked full event every night.</p>' +
       '<div class="stats"><div><b>' + total.toLocaleString() + "</b>videos</div><div><b>" + hrs.toLocaleString() + "</b>hours</div><div><b>" + WR.length.toLocaleString() + "</b>wrestlers indexed</div></div></section>";
     h += '<section class="sec"><div class="sh"><div><h2>Live now</h2><p>24/7 channels — everyone sees the same thing at the same time.</p></div><a class="more" href="#/live">Guide</a></div><div class="rail" id="liverail">' + CH.map(liveCard).join("") + "</div></section>";
     var cw = cwAll(), ids = Object.keys(cw).filter(function (id) { return IDX[id] != null; }).sort(function (a, b) { return cw[b].at - cw[a].at; }).slice(0, 15).map(function (id) { return IDX[id]; });
@@ -498,7 +498,7 @@
     if (tab === "events" || tab === "shows") {
       var l = (tab === "events" ? evs : tv).sort(bycount), main = l.filter(function (si) { return S[si][2] !== "special"; }), sp = l.filter(function (si) { return S[si][2] === "special"; });
       if (tab === "events") {
-        h += '<div class="grp"><h3>Pay-per-views & premium events · A–Z</h3><div class="sg">' + main.slice().sort(function (a, c) { return S[a][1].localeCompare(S[c][1]); }).map(function (si) { return seriesCard(si, false); }).join("") + "</div></div>";
+        if (main.length) h += '<div class="grp"><h3>Pay-per-views & premium events · A–Z</h3><div class="sg">' + main.slice().sort(function (a, c) { return S[a][1].localeCompare(S[c][1]); }).map(function (si) { return seriesCard(si, false); }).join("") + "</div></div>";
         if (sp.length) h += '<div class="grp"><h3>Specials & supercards</h3><div class="sg">' + sp.map(function (si) { return seriesCard(si, false); }).join("") + "</div></div>";
       } else h += '<div class="grp"><h3>Weekly shows</h3><div class="sg">' + l.map(function (si) { return seriesCard(si, false); }).join("") + "</div></div>";
     } else if (tab === "years") {
