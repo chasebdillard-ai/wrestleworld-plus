@@ -409,3 +409,10 @@ html.tv .top .hkd-btn.hkd-hdr.tvnav-focus{outline:3px solid #F2C14E!important;ou
 .guide .evpast li b{width:84px}
 .guide .evpast li span{color:var(--tx2)}
 @media(max-width:600px){.evsl{padding:8px 12px}.evsl .evlogo[src^="eotn-logo"]{height:34px;margin-bottom:4px}.evsl h3{font-size:15px;margin-bottom:2px}.evsl p:not(.when):not(.cd):not(.k){display:none}.evsl .cd{font-size:17px}}
+
+/* 2026-11-27 Bronson Reed tribute */
+.reed-hero{position:relative;height:min(52vw,420px);overflow:hidden;background:#070708}
+.reed-hero img{width:100%;height:100%;object-fit:cover;object-position:57% 30%}
+.reed-hero:after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,var(--bg,#05050B) 0%,transparent 45%)}
+.reed-h .kick{color:#d9bc6a;letter-spacing:.3em;text-transform:uppercase;font-size:12px;font-weight:700}
+.reed-ded{max-width:760px;color:var(--tx,#eee)!important;font-size:15px!important;line-height:1.55}

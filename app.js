@@ -55,6 +55,11 @@
     var f = function (u) { return fetch(u).then(function (r) { if (!r.ok) throw new Error(u + " " + r.status); return r.json(); }); };
     return Promise.all([f("catalog.json?v=" + window.WW_VER), f("wrestlers.json?v=" + window.WW_VER), f("channels.json?v=" + window.WW_VER)]).then(function (r) {
       CAT = r[0]; V = CAT.v; S = CAT.series; WR = r[1]; CH = r[2].channels; EPOCH = r[2].epoch;
+      (function () {  // 2026-11-27 Bronson Reed tribute: official WWE/TNA uploads not yet in the catalog join their hub's Specials / More Full Matches
+        var have = {}, SER = { wwe: { m: 12, s: 4, p: 38 }, nxt: { m: 70, s: 71, p: 76 }, tna: { m: 126, s: 105, p: 105 } };
+        V.forEach(function (v) { have[v[0]] = 1; });
+        (window.WW_REED || []).forEach(function (x) { if (have[x.id]) return; var sr = (SER[x.b] || SER.wwe)[x.k]; if (sr == null || !S[sr]) return; have[x.id] = 1; V.push([x.id, x.t, x.d, sr, x.y || 0, x.dt || "", x.k]); });
+      })();
       ORDER.forEach(function (b) { SERIES_BY_BRAND[b] = []; BY_BRAND[b] = []; });
       S.forEach(function (s, i) { s.push(0, 9999, 0, []); SERIES_BY_BRAND[s[0]].push(i); }); // s[3]=count s[4]=minY s[5]=maxY s[6]=videos
       for (var i = 0; i < V.length; i++) {
@@ -386,10 +391,22 @@
   }
   function evNextNight(c) { return evNextNights(c, 1)[0] || null; }
   function etHr(x) { return etTime(x).replace(":00 ", " "); }  // "8 PM ET"
+  function reedQueue() { return (window.WW_REED || []).map(function (x) { return IDX[x.id]; }).filter(function (i) { return i != null; }); }
+  function viewReed() {
+    setTitle("In Loving Memory: Bronson Reed"); nav("home");
+    var L = (window.WW_REED || []).filter(function (x) { return IDX[x.id] != null; }), q = queue(L.map(function (x) { return IDX[x.id]; })), secs = [], cur = null, tot = 0;
+    L.forEach(function (x) { tot += x.d || 0; if (!cur || cur.ch !== x.ch) { cur = { ch: x.ch, l: [] }; secs.push(cur); } cur.l.push(IDX[x.id]); });
+    app.innerHTML = '<div class="reed-hero"><img src="reed_poster.jpg?v=' + window.WW_VER + '" alt="In loving memory of Jermaine Haley, Bronson Reed, 1988 to 2026"></div><div class="wrap"><div class="sp-h reed-h"><span class="kick">In loving memory</span><h1>Bronson Reed</h1>' +
+      '<p class="reed-ded">Dedicated to Jermaine Haley, known to the world as \u201cBig\u201d Bronson Reed and JONAH (August 25, 1988 \u2013 November 27, 2026). From the independents of Adelaide to NXT North American Champion, IMPACT, the 2024 Andr\u00e9 the Giant Memorial Battle Royal and The Vision, he gave every match everything he had. Thank you for every Tsunami. Our thoughts are with his wife Paige, their daughter and the entire Haley family.</p>' +
+      '<p>' + L.length + ' matches and moments \u00b7 ' + Math.round(tot / 3600 * 10) / 10 + ' hours \u00b7 NXT, IMPACT and WWE, in order</p></div><div class="tools"><button class="chip" data-playq="' + q + '">' + ICON.play.replace("<svg", '<svg width="14" height="14"') + 'Play tribute</button></div>' +
+      secs.map(function (sc) { return '<section class="ysec"><h2>' + esc(sc.ch) + ' <small>' + sc.l.length + '</small></h2><div class="vl cols">' + sc.l.map(function (i) { return row(i, q, { logo: 1, series: 1 }); }).join("") + '</div></section>'; }).join("") + foot() + "</div>";
+  }
   function vlrQueue() { return (window.WW_VLR || []).map(function (id) { return IDX[id]; }).filter(function (i) { return i != null; }); }
   function brandRecent(b) { var l = BY_BRAND[b].filter(function (i) { return V[i][5] && V[i][2] >= 900; }); l.sort(function (a, c) { return V[c][5].localeCompare(V[a][5]); }); return l[0] != null ? l[0] : BY_BRAND[b][0]; }
   function carSlides() {
     var out = [];
+    var rq = reedQueue();
+    if (rq.length) out.push({ b: "ww", img: '<img src="reed_poster.jpg?v=' + window.WW_VER + '" alt="In loving memory of Jermaine Haley, Bronson Reed, 1988 to 2026" loading="eager" style="object-position:57% 30%">', tag: "In loving memory", title: "Bronson Reed", sub: "Jermaine Haley, 1988\u20132026. A tribute playlist of his greatest matches and moments from NXT, IMPACT and WWE. Thank you for every Tsunami.", badge: rq.length + " matches & moments", btn: "Play tribute", act: 'data-playq="' + queue(rq) + '"', btn2: ["View playlist", "#/reed"], tribute: 1 });
     ["ww-eotn"].forEach(function (id) {
       var c = null; CH.forEach(function (x) { if (x.id === id) c = x; }); if (!c || !c.events) return;
       var st = evState(c), e = st.ev, b = c.brand;
@@ -1139,6 +1156,7 @@
     switch (r[0]) {
       case "promotions": viewPromotions(); break;
       case "new": viewNew(); break;
+      case "reed": viewReed(); break;
       case "later": viewLater(); break;
       case "account": viewAccount(M.mode); M.mode = null; break;
       case "b": viewHub(r[1], r[2]); break;
